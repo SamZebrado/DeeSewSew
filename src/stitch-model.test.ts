@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { canvasToNormalized, createStitch, deserializePiece, emptyPiece, isInsideFabric, normalizedToCanvas, serializePiece } from './stitch-model'
 import { clearHistory, commit, createHistory, redo, undo } from './history'
+import { ThreadCoverage } from './thread-coverage'
 
 describe('normalized embroidery geometry', () => {
   it('round trips canvas coordinates across resize', () => {
@@ -42,5 +43,17 @@ describe('history and persistence', () => {
     expect(deserializePiece(serializePiece(piece))).toEqual(piece)
     expect(deserializePiece('{broken')).toEqual(emptyPiece())
     expect(deserializePiece(JSON.stringify({ schemaVersion: 99, stitches: [] }))).toEqual(emptyPiece())
+  })
+})
+
+describe('derived thread coverage', () => {
+  it('recognizes exact and nearby overlap while keeping distant paths separate', () => {
+    const coverage = new ThreadCoverage(96)
+    const start = { x: .2, y: .4 }; const end = { x: .8, y: .4 }
+    expect(coverage.samplePath(start, end)).toBe(0)
+    coverage.addPath(start, end)
+    expect(coverage.samplePath(start, end)).toBeGreaterThan(.4)
+    expect(coverage.samplePath({ x: .2, y: .408 }, { x: .8, y: .408 })).toBeGreaterThan(.15)
+    expect(coverage.samplePath({ x: .2, y: .6 }, { x: .8, y: .6 })).toBe(0)
   })
 })

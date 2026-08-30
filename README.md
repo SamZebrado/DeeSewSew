@@ -13,8 +13,8 @@ DeeSewSew is a quiet browser-based digital embroidery toy. Milestone 1 focuses o
 - Nine generic thread colors with no proprietary color catalogue
 - Ordered 2.5D strands with contact shadow, edge, highlight, fiber detail, and deterministic buildup offsets
 - Undo, redo, confirmed clear, and versioned local persistence
-- Development-only renderer scenes at `?scene=single`, `crossing`, `buildup`, `parallel`, `mixed`, and a 1,000-strand `stress` scene
-- Installable static PWA shell and `/DeeSewSew/` GitHub Pages base path
+- Development-only renderer scenes at `?scene=single`, `crossing`, `buildup`, `parallel`, `mixed`, `comparison`, and a 1,000-strand `stress` scene
+- Installable static PWA shell with generated full-asset precache and `/DeeSewSew/` GitHub Pages base path
 
 Embroidery data stays in the browser's local storage and is not transmitted.
 
@@ -33,6 +33,8 @@ The development URL includes the configured base path, normally `http://127.0.0.
 
 ```sh
 npm test
+npm run test:e2e
+npm run test:offline
 npm run typecheck
 npm run build
 npm run preview

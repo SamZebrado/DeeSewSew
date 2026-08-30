@@ -1,4 +1,5 @@
 import { FABRIC_RADIUS, type NormalizedPoint, type Stitch } from './stitch-model'
+import { ThreadCoverage } from './thread-coverage'
 
 const seededUnit = (seed: number): number => {
   const value = Math.sin(seed * 12.9898) * 43758.5453
@@ -65,24 +66,27 @@ export class EmbroideryRenderer {
 
   private point(point: NormalizedPoint): [number, number] { return [point.x * this.size, point.y * this.size] }
 
-  private drawThread(stitch: Stitch, preview = false, stackDepth = 0): void {
+  private drawThread(stitch: Stitch, preview = false, buildup = 0): void {
     const ctx = this.context
     const [x1, y1] = this.point(stitch.start); const [x2, y2] = this.point(stitch.end)
     const dx = x2 - x1; const dy = y2 - y1; const length = Math.max(1, Math.hypot(dx, dy))
     const nx = -dy / length; const ny = dx / length
     const spreadOrder = [0, .75, -.75, 1.5, -1.5, 2.25, -2.25, 3, -3]
-    const stackSpread = spreadOrder[stackDepth % spreadOrder.length]
+    const stackSpread = spreadOrder[Math.min(spreadOrder.length - 1, Math.round(buildup))]
     const lift = (seededUnit(stitch.seed) - .5) * .9 + stackSpread
     const width = stitch.width * (this.size / 640) * (preview ? .9 : 1)
     const drawLine = (offset: number) => {
       ctx.beginPath(); ctx.moveTo(x1 + nx * (offset + lift), y1 + ny * (offset + lift)); ctx.lineTo(x2 + nx * (offset + lift), y2 + ny * (offset + lift)); ctx.stroke()
     }
     ctx.save(); ctx.globalAlpha = preview ? .55 : 1; ctx.lineCap = 'round'
-    ctx.strokeStyle = 'rgba(65,45,33,.20)'; ctx.lineWidth = width + 3.2; drawLine(1.5)
+    ctx.strokeStyle = `rgba(65,45,33,${Math.min(.30, .18 + buildup * .018)})`; ctx.lineWidth = width + 3.2 + Math.min(1.5, buildup * .12); drawLine(1.5 + Math.min(1.2, buildup * .12))
     ctx.strokeStyle = shade(stitch.color, -40); ctx.lineWidth = width + 1.2; drawLine(0)
     ctx.strokeStyle = stitch.color; ctx.lineWidth = width; drawLine(0)
     ctx.strokeStyle = shade(stitch.color, 42); ctx.lineWidth = Math.max(.8, width * .24); drawLine(-width * .16)
     ctx.strokeStyle = 'rgba(255,255,255,.24)'; ctx.lineWidth = Math.max(.45, width * .09); drawLine(-width * .32)
+    if (!preview && buildup > .65) {
+      ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = Math.max(.5, width * .12); drawLine(width * .42)
+    }
     if (!preview) for (const [x, y] of [[x1, y1], [x2, y2]]) {
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, width * 1.3)
       gradient.addColorStop(0, 'rgba(70,48,35,.33)'); gradient.addColorStop(1, 'rgba(70,48,35,0)')
@@ -104,14 +108,11 @@ export class EmbroideryRenderer {
     const edge = ctx.createRadialGradient(center, center, inner * .6, center, center, inner)
     edge.addColorStop(0, 'rgba(255,255,255,.07)'); edge.addColorStop(.82, 'rgba(117,87,51,.02)'); edge.addColorStop(1, 'rgba(77,50,28,.19)')
     ctx.fillStyle = edge; ctx.fillRect(0, 0, this.size, this.size)
-    const stacks = new Map<string, number>()
+    const coverage = new ThreadCoverage()
     stitches.forEach((stitch) => {
-      const a = `${Math.round(stitch.start.x * 80)},${Math.round(stitch.start.y * 80)}`
-      const b = `${Math.round(stitch.end.x * 80)},${Math.round(stitch.end.y * 80)}`
-      const key = a < b ? `${a}:${b}` : `${b}:${a}`
-      const depth = stacks.get(key) ?? 0
-      this.drawThread(stitch, false, depth)
-      stacks.set(key, depth + 1)
+      const buildup = coverage.samplePath(stitch.start, stitch.end)
+      this.drawThread(stitch, false, buildup)
+      coverage.addPath(stitch.start, stitch.end)
     })
     if (anchor && target) this.drawThread({ id: 'preview', type: 'running', start: anchor, end: target, color, width: 3.8, order: Infinity, seed: 17 }, true)
     if (anchor) {

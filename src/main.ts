@@ -1,6 +1,7 @@
 import './style.css'
 import { EmbroideryRenderer } from './renderer'
 import { createStitch, loadPiece, savePiece, type NormalizedPoint, type Piece, type StitchType } from './stitch-model'
+import { clearHistory, commit, createHistory, redo, undo, type HistoryState } from './history'
 import { makeVisualScene } from './visual-scenes'
 
 const colors = [['Poppy', '#b9403c'], ['Coral', '#df735f'], ['Marigold', '#d49a2f'], ['Leaf', '#55765b'], ['Indigo', '#425f86'], ['Plum', '#74516f'], ['Walnut', '#765443'], ['Ink', '#363539'], ['Cream', '#e6d7b7']] as const
@@ -29,7 +30,7 @@ const renderer = new EmbroideryRenderer(canvas)
 let piece: Piece = loadPiece()
 const scene = import.meta.env.DEV ? makeVisualScene(new URLSearchParams(location.search).get('scene') ?? '') : null
 if (scene) piece = { schemaVersion: 1, nextOrder: scene.length + 1, stitches: scene }
-let redoStack: Piece['stitches'] = []
+let history: HistoryState<Piece['stitches'][number]> = createHistory(piece.stitches)
 let color: string = colors[0][1]
 let stitchType: StitchType = 'running'
 let anchor: NormalizedPoint | null = null
@@ -41,13 +42,14 @@ const statusTitle = document.querySelector<HTMLElement>('#status-title')!
 const statusCopy = document.querySelector<HTMLElement>('#status-copy')!
 
 function render(): void {
-  renderer.render(piece.stitches, anchor, target, color)
-  undoButton.disabled = piece.stitches.length === 0
-  clearButton.disabled = piece.stitches.length === 0
-  redoButton.disabled = redoStack.length === 0
+  renderer.render(history.present, anchor, target, color)
+  undoButton.disabled = history.present.length === 0
+  clearButton.disabled = history.present.length === 0
+  redoButton.disabled = history.future.length === 0
 }
 function announce(title: string, copy: string): void { statusTitle.textContent = title; statusCopy.textContent = copy }
-function persist(): void { savePiece(piece) }
+function syncPiece(): void { piece = { ...piece, stitches: history.present } }
+function persist(): void { syncPiece(); savePiece(piece) }
 function cancelPending(): void { anchor = null; target = null; announce('Ready to stitch', 'Place a needle point inside the fabric.'); render() }
 function pointerPoint(event: PointerEvent): NormalizedPoint | null { return renderer.toNormalized(event.clientX, event.clientY - (event.pointerType === 'touch' ? 34 : 0)) }
 
@@ -59,7 +61,7 @@ canvas.addEventListener('pointerup', (event) => {
   if (!anchor) { anchor = point; target = point; announce('Needle point placed', 'Move to preview the thread, then tap to settle the stitch.'); render(); return }
   if (Math.hypot(point.x - anchor.x, point.y - anchor.y) < .018) { announce('A little farther', 'Move the needle tip before settling this stitch.'); return }
   const stitch = createStitch(piece, stitchType, anchor, point, color)
-  piece = { ...piece, stitches: [...piece.stitches, stitch] }; redoStack = []; anchor = point; target = point
+  history = commit(history, stitch); syncPiece(); anchor = point; target = point
   announce('Thread settled', 'Keep placing points, or press Escape to finish this line.'); persist(); render()
 })
 canvas.addEventListener('pointercancel', cancelPending)
@@ -73,9 +75,9 @@ document.querySelectorAll<HTMLButtonElement>('[data-stitch]').forEach((button) =
   document.querySelectorAll('[data-stitch]').forEach((item) => { item.classList.remove('selected'); item.setAttribute('aria-checked', 'false') })
   button.classList.add('selected'); button.setAttribute('aria-checked', 'true'); stitchType = button.dataset.stitch as StitchType; cancelPending()
 }))
-undoButton.addEventListener('click', () => { const stitch = piece.stitches.at(-1); if (!stitch) return; redoStack.push(stitch); piece = { ...piece, stitches: piece.stitches.slice(0, -1) }; cancelPending(); persist() })
-redoButton.addEventListener('click', () => { const stitch = redoStack.pop(); if (!stitch) return; piece = { ...piece, stitches: [...piece.stitches, stitch] }; cancelPending(); persist() })
-clearButton.addEventListener('click', () => { if (!piece.stitches.length || !window.confirm('Clear every stitch from this fabric?')) return; piece = { ...piece, stitches: [] }; redoStack = []; cancelPending(); persist() })
+undoButton.addEventListener('click', () => { history = undo(history); cancelPending(); persist() })
+redoButton.addEventListener('click', () => { history = redo(history); cancelPending(); persist() })
+clearButton.addEventListener('click', () => { if (!history.present.length || !window.confirm('Clear every stitch from this fabric?')) return; history = clearHistory(history); cancelPending(); persist() })
 window.addEventListener('keydown', (event) => { if (event.key === 'Escape') cancelPending(); if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redoButton.click() : undoButton.click() } })
 renderer.onResize = render
 render()

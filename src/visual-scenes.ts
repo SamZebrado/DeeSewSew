@@ -3,7 +3,7 @@ import type { Stitch } from './stitch-model'
 const colors = ['#b9403c', '#425f86', '#55765b', '#d49a2f']
 
 export function makeVisualScene(name: string): Stitch[] | null {
-  if (!['single', 'crossing', 'buildup', 'parallel', 'mixed', 'stress'].includes(name)) return null
+  if (!['single', 'crossing', 'buildup', 'parallel', 'mixed', 'comparison', 'stress'].includes(name)) return null
   const stitches: Stitch[] = []
   const add = (x1: number, y1: number, x2: number, y2: number, color = colors[0], seed = stitches.length + 100) => stitches.push({ id: `scene-${stitches.length + 1}`, type: 'back', start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, color, width: 4.4, order: stitches.length + 1, seed })
 
@@ -24,6 +24,12 @@ export function makeVisualScene(name: string): Stitch[] | null {
   } else if (name === 'mixed') {
     for (let index = 0; index < 22; index += 1) add(.25 + index * .021, .28, .22 + index * .021, .73, colors[1])
     for (let index = 0; index < 18; index += 1) add(.27, .3 + index * .023, .73, .25 + index * .023, colors[3])
+  } else if (name === 'comparison') {
+    for (let index = 0; index < 8; index += 1) add(.19, .25, .43, .25, colors[0], 800 + index)
+    for (let index = 0; index < 8; index += 1) add(.57 + index * .001, .22 + index * .002, .81 - index * .001, .28 - index * .002, colors[1], 820 + index)
+    for (let index = 0; index < 16; index += 1) add(.22 + index * .018, .45, .19 + index * .018, .69, colors[2], 840 + index)
+    for (let index = 0; index < 5; index += 1) add(.56, .49 + index * .035, .81, .49 + index * .035, colors[3], 880 + index)
+    for (let index = 0; index < 5; index += 1) add(.60 + index * .035, .44, .60 + index * .035, .69, colors[0], 900 + index)
   } else for (let index = 0; index < 1000; index += 1) {
     const ring = (index % 25) / 25 * Math.PI * 2
     const band = Math.floor(index / 25) % 20
