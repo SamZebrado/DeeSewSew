@@ -9,6 +9,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:offline": "npm run build && playwright test --config=playwright.offline.config.ts",
+    "evidence:check": "node scripts/verify-responsive-evidence.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc && vite build && node scripts/generate-sw.mjs",
     "preview": "vite preview"
