@@ -1,0 +1,14 @@
+{
+  "name": "DeeSewSew",
+  "short_name": "DeeSewSew",
+  "description": "A tiny embroidery studio in your browser.",
+  "start_url": "/DeeSewSew/",
+  "scope": "/DeeSewSew/",
+  "display": "standalone",
+  "background_color": "#eee9df",
+  "theme_color": "#eee9df",
+  "icons": [
+    { "src": "/DeeSewSew/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/DeeSewSew/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
