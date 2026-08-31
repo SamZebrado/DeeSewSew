@@ -1,7 +1,7 @@
-export type StitchMotionPhase = 'emerge' | 'pull' | 'press' | 'pierce' | 'release'
+export type StitchMotionPhase = 'press' | 'pierce' | 'tighten' | 'settle' | 'release'
 
-export interface StitchMotionSampleV1 {
-  version: 1
+export interface StitchMotionSampleV2 {
+  version: 2
   elapsedMs: number
   durationMs: number
   progress: number
@@ -24,15 +24,15 @@ export interface StitchMotionPhaseWindow {
   end: number
 }
 
-export const STITCH_MOTION_VERSION = 1
-export const STITCH_MOTION_DURATION_MS = 1150
+export const STITCH_MOTION_VERSION = 2
+export const STITCH_MOTION_DURATION_MS = 620
 
 export const STITCH_MOTION_PHASES: readonly StitchMotionPhaseWindow[] = Object.freeze([
-  Object.freeze({ phase: 'emerge', start: 0, end: 0.2 }),
-  Object.freeze({ phase: 'pull', start: 0.2, end: 0.6 }),
-  Object.freeze({ phase: 'press', start: 0.6, end: 0.78 }),
-  Object.freeze({ phase: 'pierce', start: 0.78, end: 0.9 }),
-  Object.freeze({ phase: 'release', start: 0.9, end: 1 }),
+  Object.freeze({ phase: 'press', start: 0, end: 0.18 }),
+  Object.freeze({ phase: 'pierce', start: 0.18, end: 0.32 }),
+  Object.freeze({ phase: 'tighten', start: 0.32, end: 0.78 }),
+  Object.freeze({ phase: 'settle', start: 0.78, end: 0.92 }),
+  Object.freeze({ phase: 'release', start: 0.92, end: 1 }),
 ])
 
 function clamp01(value: number): number {
@@ -63,11 +63,11 @@ function rounded(value: number): number {
   return Number(value.toFixed(6))
 }
 
-export function sampleStitchMotionProgress(value: number): StitchMotionSampleV1 {
+export function sampleStitchMotionProgress(value: number): StitchMotionSampleV2 {
   const progress = clamp01(value)
   const window = phaseAt(progress)
   const phaseProgress = clamp01((progress - window.start) / (window.end - window.start))
-  let needlePosition = -1
+  let needlePosition = 0.72
   let needleOpacity = 1
   let threadPull = 0
   let dimpleDepth = 0
@@ -75,22 +75,9 @@ export function sampleStitchMotionProgress(value: number): StitchMotionSampleV1 
   let dimpleOpacity = 0
 
   switch (window.phase) {
-    case 'emerge': {
-      const eased = easeOutCubic(phaseProgress)
-      needlePosition = lerp(-1, 0.92, eased)
-      needleOpacity = eased
-      break
-    }
-    case 'pull': {
-      const eased = smoothstep(phaseProgress)
-      needlePosition = lerp(0.92, 0.68, eased)
-      threadPull = eased
-      break
-    }
     case 'press': {
       const eased = smoothstep(phaseProgress)
-      needlePosition = lerp(0.68, 0.02, eased)
-      threadPull = 1
+      needlePosition = lerp(0.72, 0.03, eased)
       dimpleDepth = 0.9 * eased
       dimpleRadius = eased === 0 ? 0 : lerp(0.62, 1, eased)
       dimpleOpacity = 0.78 * eased
@@ -99,26 +86,46 @@ export function sampleStitchMotionProgress(value: number): StitchMotionSampleV1 
     case 'pierce': {
       const eased = smoothstep(phaseProgress)
       needlePosition = lerp(0.02, -1, eased)
-      threadPull = 1
+      threadPull = 0
       dimpleDepth = lerp(0.9, 0.72, eased)
       dimpleRadius = lerp(1, 0.9, eased)
       dimpleOpacity = lerp(0.78, 0.62, eased)
       break
     }
+    case 'tighten': {
+      const eased = smoothstep(phaseProgress)
+      needlePosition = -1
+      needleOpacity = lerp(0.78, 0.32, eased)
+      threadPull = eased
+      dimpleDepth = lerp(0.72, 0.24, eased)
+      dimpleRadius = lerp(0.9, 0.5, eased)
+      dimpleOpacity = lerp(0.62, 0.22, eased)
+      break
+    }
+    case 'settle': {
+      const eased = smoothstep(phaseProgress)
+      needlePosition = -1
+      needleOpacity = lerp(0.32, 0.16, eased)
+      threadPull = 1
+      dimpleDepth = 0.24 * (1 - eased)
+      dimpleRadius = 0.5 * (1 - eased)
+      dimpleOpacity = 0.22 * (1 - eased)
+      break
+    }
     case 'release': {
       const remaining = 1 - easeOutCubic(phaseProgress)
       needlePosition = -1
-      needleOpacity = remaining
+      needleOpacity = 0.16 * remaining
       threadPull = 1
-      dimpleDepth = 0.72 * remaining
-      dimpleRadius = 0.9 * remaining
-      dimpleOpacity = 0.62 * remaining
+      dimpleDepth = 0
+      dimpleRadius = 0
+      dimpleOpacity = 0
       break
     }
   }
 
   return {
-    version: 1,
+    version: 2,
     elapsedMs: rounded(progress * STITCH_MOTION_DURATION_MS),
     durationMs: STITCH_MOTION_DURATION_MS,
     progress: rounded(progress),
@@ -135,7 +142,7 @@ export function sampleStitchMotionProgress(value: number): StitchMotionSampleV1 
   }
 }
 
-export function sampleStitchMotion(elapsedMs: number): StitchMotionSampleV1 {
+export function sampleStitchMotion(elapsedMs: number): StitchMotionSampleV2 {
   const safeElapsed = Number.isFinite(elapsedMs) ? Math.min(STITCH_MOTION_DURATION_MS, Math.max(0, elapsedMs)) : 0
   return sampleStitchMotionProgress(safeElapsed / STITCH_MOTION_DURATION_MS)
 }

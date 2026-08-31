@@ -171,7 +171,7 @@ test('custom colors survive malformed optional settings, switching, history, rel
   await expect(page.getByRole('radio', { name: 'Custom #123456' })).toHaveAttribute('aria-checked', 'true')
 })
 
-test('1,000-segment Node 3 topology remains interactively bounded with renderer cache counters', async ({ page }) => {
+test('1,000 settled segments plus one active soft thread remain interactively bounded', async ({ page }) => {
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto('./')
@@ -195,17 +195,23 @@ test('1,000-segment Node 3 topology remains interactively bounded with renderer 
   await page.waitForTimeout(500)
   await page.getByRole('button', { name: /Stop rotation/ }).click()
   const rotateStopMs = Date.now() - rotateStartedAt
-  await page.getByRole('button', { name: 'Snap back' }).click()
+  await page.getByRole('button', { name: 'Return front' }).click()
   const hoop = page.locator('#hoop-shell')
+  await expect(hoop).toHaveAttribute('data-target-mode', 'hidden')
   await hoop.scrollIntoViewIfNeeded()
   const box = await hoop.boundingBox()
   if (!box) throw new Error('Stress hoop has no box')
   const previewStartedAt = Date.now()
-  await page.mouse.move(box.x + box.width * .42, box.y + box.height * .55)
-  await page.waitForTimeout(50)
+  for (const [x, y] of [[.38, .46], [.46, .62], [.55, .65], [.62, .54]]) {
+    await page.mouse.move(box.x + box.width * x, box.y + box.height * y, { steps: 4 })
+  }
+  await page.waitForTimeout(120)
   const previewMs = Date.now() - previewStartedAt
+  const activePointCount = Number(await hoop.getAttribute('data-active-thread-points'))
+  const activeSag = Number(await hoop.getAttribute('data-active-thread-sag'))
+  const activeLoopStarts = Number(await hoop.getAttribute('data-active-thread-loop-starts'))
   const commitStartedAt = Date.now()
-  await page.mouse.click(box.x + box.width * .42, box.y + box.height * .55)
+  await page.mouse.click(box.x + box.width * .62, box.y + box.height * .54)
   const commitMs = Date.now() - commitStartedAt
   const undoStartedAt = Date.now()
   await page.getByRole('button', { name: 'Undo last puncture' }).click()
@@ -215,12 +221,15 @@ test('1,000-segment Node 3 topology remains interactively bounded with renderer 
   await page.reload()
   const reloadMs = Date.now() - reloadStartedAt
   const countersAfterReload = await page.locator('#embroidery-back').evaluate((canvas) => (canvas as unknown as Record<string, unknown>).__deesewsewRendererCounters)
-  const report = { method: 'Playwright wall-clock around real Chrome operations; 1,000 true Node 3 surface segments split across both faces', initialLoadMs, rotateStopMs, previewMs, commitMs, undoMs, reloadMs, countersBeforeReload, countersAfterReload, pageErrors }
+  const report = { method: 'Playwright wall-clock around real Chrome operations; 1,000 settled Node 3 surface segments plus one bounded active soft thread and hidden-side continuation', initialLoadMs, rotateStopMs, previewMs, commitMs, undoMs, reloadMs, activePointCount, activeSag, activeLoopStarts, countersBeforeReload, countersAfterReload, pageErrors }
   await writeFile(`${evidenceDir}/performance-1000-segments.json`, `${JSON.stringify(report, null, 2)}\n`)
   expect(pageErrors).toEqual([])
   expect(initialLoadMs).toBeLessThan(5_000)
   expect(rotateStopMs).toBeLessThan(2_000)
   expect(previewMs).toBeLessThan(1_500)
+  expect(activePointCount).toBe(10)
+  expect(activeSag).toBeGreaterThan(0)
+  expect(activeLoopStarts).toBeLessThan(8)
   expect(commitMs).toBeLessThan(1_500)
   expect(undoMs).toBeLessThan(1_500)
   expect(reloadMs).toBeLessThan(5_000)

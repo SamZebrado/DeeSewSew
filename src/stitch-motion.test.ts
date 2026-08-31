@@ -8,29 +8,30 @@ import {
 } from './stitch-motion'
 
 describe('stitch motion sampler', () => {
-  it('uses the accepted duration and exact five-phase schedule', () => {
-    expect(STITCH_MOTION_VERSION).toBe(1)
-    expect(STITCH_MOTION_DURATION_MS).toBe(1150)
+  it('uses the short tightening duration and exact five-phase schedule', () => {
+    expect(STITCH_MOTION_VERSION).toBe(2)
+    expect(STITCH_MOTION_DURATION_MS).toBe(620)
     expect(STITCH_MOTION_PHASES).toEqual([
-      { phase: 'emerge', start: 0, end: 0.2 },
-      { phase: 'pull', start: 0.2, end: 0.6 },
-      { phase: 'press', start: 0.6, end: 0.78 },
-      { phase: 'pierce', start: 0.78, end: 0.9 },
-      { phase: 'release', start: 0.9, end: 1 },
+      { phase: 'press', start: 0, end: 0.18 },
+      { phase: 'pierce', start: 0.18, end: 0.32 },
+      { phase: 'tighten', start: 0.32, end: 0.78 },
+      { phase: 'settle', start: 0.78, end: 0.92 },
+      { phase: 'release', start: 0.92, end: 1 },
     ])
   })
 
   it('selects phases deterministically at every boundary', () => {
-    expect([0, 0.2, 0.6, 0.78, 0.9, 1].map((progress) => sampleStitchMotionProgress(progress).phase)).toEqual([
-      'emerge', 'pull', 'press', 'pierce', 'release', 'release',
+    expect([0, 0.18, 0.32, 0.78, 0.92, 1].map((progress) => sampleStitchMotionProgress(progress).phase)).toEqual([
+      'press', 'pierce', 'tighten', 'settle', 'release', 'release',
     ])
   })
 
   it('pulls the thread, presses the fabric, pierces, and fully releases', () => {
     expect(sampleStitchMotionProgress(0).threadPull).toBe(0)
-    expect(sampleStitchMotionProgress(0.5).threadPull).toBeGreaterThan(0)
-    expect(sampleStitchMotionProgress(0.7).dimple.depth).toBeGreaterThan(0)
-    expect(sampleStitchMotionProgress(0.85).needlePosition).toBeLessThan(0)
+    expect(sampleStitchMotionProgress(0.1).dimple.depth).toBeGreaterThan(0)
+    expect(sampleStitchMotionProgress(0.25).needlePosition).toBeLessThan(0)
+    expect(sampleStitchMotionProgress(0.55).threadPull).toBeGreaterThan(0)
+    expect(sampleStitchMotionProgress(0.85).threadPull).toBe(1)
     const settled = sampleStitchMotionProgress(1)
     expect(settled.threadPull).toBe(1)
     expect(settled.needleOpacity).toBe(0)

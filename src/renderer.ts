@@ -17,8 +17,9 @@ import {
   type ThreadVisualStyle,
 } from './renderer-style'
 import { FABRIC_RADIUS, interpolate, type NormalizedPoint, type Stitch } from './stitch-model'
-import { sampleStitchMotionProgress, type StitchMotionSampleV1 } from './stitch-motion'
+import { sampleStitchMotionProgress, type StitchMotionSampleV2 } from './stitch-motion'
 import { ThreadCoverage } from './thread-coverage'
+import { tightenActiveThread } from './active-thread'
 
 export type HoopSide = 'front' | 'back'
 
@@ -26,7 +27,15 @@ export interface StitchMotion {
   stitchId: string
   progress: number
   /** A resolved sample can be supplied by a controlled clock or visual test. */
-  sample?: StitchMotionSampleV1
+  sample?: StitchMotionSampleV2
+  /** Exact transient geometry present when this puncture was committed. */
+  loosePoints?: readonly NormalizedPoint[]
+}
+
+export interface TransientThreadVisual {
+  points?: readonly NormalizedPoint[]
+  emergenceTarget?: NormalizedPoint | null
+  needleVisible?: boolean
 }
 
 export interface EmbroideryRendererOptions {
@@ -522,6 +531,49 @@ export class EmbroideryRenderer {
     ctx.restore()
   }
 
+  private traceActiveThread(ctx: CanvasRenderingContext2D, points: readonly NormalizedPoint[]): void {
+    const projected = points.map((point) => this.point(point))
+    const first = projected[0]
+    if (!first) return
+    ctx.beginPath()
+    ctx.moveTo(first[0], first[1])
+    for (let index = 1; index < projected.length - 1; index += 1) {
+      const point = projected[index]!
+      const next = projected[index + 1]!
+      ctx.quadraticCurveTo(point[0], point[1], (point[0] + next[0]) / 2, (point[1] + next[1]) / 2)
+    }
+    const last = projected.at(-1)!
+    ctx.lineTo(last[0], last[1])
+    ctx.stroke()
+  }
+
+  private drawActiveThread(ctx: CanvasRenderingContext2D, points: readonly NormalizedPoint[], color: string, alpha = .82): void {
+    if (points.length < 2) return
+    const scale = this.size / 640
+    const width = 3.8 * scale
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = 'rgba(52,37,29,.28)'
+    ctx.lineWidth = width + 3
+    ctx.shadowColor = 'rgba(45,32,24,.18)'
+    ctx.shadowBlur = Math.max(1, 3 * scale)
+    ctx.shadowOffsetY = Math.max(.8, 2 * scale)
+    this.traceActiveThread(ctx, points)
+    ctx.shadowColor = 'transparent'
+    ctx.strokeStyle = shadeColor(color, -32, this.lighting.warmth)
+    ctx.lineWidth = width + .8
+    this.traceActiveThread(ctx, points)
+    ctx.strokeStyle = color
+    ctx.lineWidth = width
+    this.traceActiveThread(ctx, points)
+    ctx.strokeStyle = 'rgba(255,255,255,.34)'
+    ctx.lineWidth = Math.max(.4, width * .14)
+    this.traceActiveThread(ctx, points)
+    ctx.restore()
+  }
+
   private coveragePoints(stitch: Stitch): [NormalizedPoint, NormalizedPoint] {
     if (this.side === 'back') return [stitch.needleStart ?? stitch.start, stitch.needleEnd ?? stitch.end]
     return [stitch.start, stitch.end]
@@ -620,7 +672,7 @@ export class EmbroideryRenderer {
     return buildup
   }
 
-  private drawDimple(ctx: CanvasRenderingContext2D, stitch: Stitch, sample: StitchMotionSampleV1): void {
+  private drawDimple(ctx: CanvasRenderingContext2D, stitch: Stitch, sample: StitchMotionSampleV2): void {
     if (sample.dimple.opacity <= 0 || sample.dimple.radius <= 0) return
     const contact = stitch.needleEnd ?? stitch.end
     const [x, y] = this.point(contact)
@@ -666,13 +718,11 @@ export class EmbroideryRenderer {
     ctx.restore()
   }
 
-  private drawNeedle(ctx: CanvasRenderingContext2D, stitch: Stitch, sample: StitchMotionSampleV1): void {
+  private drawNeedle(ctx: CanvasRenderingContext2D, stitch: Stitch, sample: StitchMotionSampleV2): void {
     if (sample.needleOpacity <= 0) return
     const start = stitch.needleStart ?? stitch.start
     const end = stitch.needleEnd ?? stitch.end
-    const contact = sample.phase === 'emerge' ? start
-      : sample.phase === 'pull' ? interpolate(start, end, sample.threadPull)
-        : end
+    const contact = end
     const [contactX, contactY] = this.point(contact)
     const chordX = end.x - start.x
     const chordY = end.y - start.y
@@ -709,9 +759,11 @@ export class EmbroideryRenderer {
     ctx.restore()
   }
 
-  private drawMotion(ctx: CanvasRenderingContext2D, stitch: Stitch, sample: StitchMotionSampleV1, drawThread: boolean): void {
+  private drawMotion(ctx: CanvasRenderingContext2D, stitch: Stitch, motion: StitchMotion, sample: StitchMotionSampleV2, drawThread: boolean): void {
     this.drawDimple(ctx, stitch, sample)
-    if (drawThread && sample.threadPull > 0) {
+    if (drawThread && motion.loosePoints && motion.loosePoints.length >= 2) {
+      this.drawActiveThread(ctx, tightenActiveThread(motion.loosePoints, stitch.start, stitch.end, sample.threadPull), stitch.color, 1)
+    } else if (drawThread && sample.threadPull > 0) {
       const needleStart = stitch.needleStart ?? stitch.start
       const needleEnd = stitch.needleEnd ?? stitch.end
       const settle = clampUnit((sample.progress - 0.6) / 0.3)
@@ -724,8 +776,30 @@ export class EmbroideryRenderer {
     this.counters.motionDraw += 1
   }
 
-  private drawPreview(ctx: CanvasRenderingContext2D, anchor: NormalizedPoint | null, target: NormalizedPoint | null, color: string): void {
-    if (anchor && target && !samePoint(anchor, target)) {
+  private drawEmergenceTarget(ctx: CanvasRenderingContext2D, point: NormalizedPoint, color: string): void {
+    const [x, y] = this.point(point)
+    const scale = this.size / 640
+    const radius = Math.max(7, 11 * scale)
+    ctx.save()
+    ctx.globalAlpha = .72
+    ctx.setLineDash([Math.max(2, 3 * scale), Math.max(2, 3 * scale)])
+    ctx.strokeStyle = shadeColor(color, -24, this.lighting.warmth)
+    ctx.lineWidth = Math.max(1, 1.6 * scale)
+    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.stroke()
+    ctx.setLineDash([])
+    ctx.fillStyle = 'rgba(255,250,240,.82)'
+    ctx.beginPath(); ctx.arc(x, y, Math.max(2, 3 * scale), 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = color
+    ctx.beginPath(); ctx.arc(x, y, Math.max(2, 3 * scale), 0, Math.PI * 2); ctx.stroke()
+    ctx.restore()
+    this.counters.previewDraw += 1
+  }
+
+  private drawPreview(ctx: CanvasRenderingContext2D, anchor: NormalizedPoint | null, target: NormalizedPoint | null, color: string, transient?: TransientThreadVisual): void {
+    if (transient?.points && transient.points.length >= 2) {
+      this.drawActiveThread(ctx, transient.points, color)
+      this.counters.previewDraw += 1
+    } else if (anchor && target && !samePoint(anchor, target)) {
       this.drawThread(ctx, {
         id: 'preview',
         type: 'running',
@@ -747,7 +821,8 @@ export class EmbroideryRenderer {
       ctx.fillStyle = color
       ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill()
     }
-    if (target) {
+    if (transient?.emergenceTarget) this.drawEmergenceTarget(ctx, transient.emergenceTarget, color)
+    if (target && transient?.needleVisible !== false) {
       const [x, y] = this.point(target)
       const scale = this.size / 640
       const angle = this.side === 'back' ? Math.PI * .18 : -Math.PI * .18
@@ -783,6 +858,7 @@ export class EmbroideryRenderer {
     color: string,
     motion: StitchMotion | null,
     tailMotion: boolean,
+    transient?: TransientThreadVisual,
   ): void {
     const ctx = this.context
     ctx.clearRect(0, 0, this.size, this.size)
@@ -800,10 +876,10 @@ export class EmbroideryRenderer {
     this.counters.cacheBlit += 1
     ctx.save()
     this.clipFabric(ctx)
-    this.drawPreview(ctx, anchor, target, color)
+    this.drawPreview(ctx, anchor, target, color, transient)
     if (motion) {
       const stitch = tailMotion ? stitches.at(-1) : stitches.find((candidate) => candidate.id === motion.stitchId)
-      if (stitch) this.drawMotion(ctx, stitch, motion.sample ?? sampleStitchMotionProgress(motion.progress), tailMotion)
+      if (stitch) this.drawMotion(ctx, stitch, motion, motion.sample ?? sampleStitchMotionProgress(motion.progress), tailMotion)
     }
     ctx.restore()
     this.drawInnerRim(ctx)
@@ -816,6 +892,7 @@ export class EmbroideryRenderer {
     target: NormalizedPoint | null,
     color: string,
     motion: StitchMotion | null = null,
+    transient?: TransientThreadVisual,
   ): void {
     if (!this.size) this.resize(false)
     const last = stitches.at(-1)
@@ -825,6 +902,6 @@ export class EmbroideryRenderer {
     if (plan.action === 'rebuild') this.rebuildSettled(stitches, plan.to)
     else if (plan.action === 'append') this.appendSettled(stitches, plan.from, plan.to)
     this.cache.accept(stitches, plan)
-    this.composeDynamic(stitches, anchor, target, color, motion, tailMotion)
+    this.composeDynamic(stitches, anchor, target, color, motion, tailMotion, transient)
   }
 }

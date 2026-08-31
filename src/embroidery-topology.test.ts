@@ -16,6 +16,7 @@ import {
 const A = { x: .30, y: .38 }
 const B = { x: .62, y: .46 }
 const C = { x: .48, y: .68 }
+const D = { x: .70, y: .58 }
 const style = { type: 'running' as const, color: '#b9403c' }
 
 describe('needle-first surface topology', () => {
@@ -36,6 +37,21 @@ describe('needle-first surface topology', () => {
     expect(third.piece.needle.side).toBe('back')
     expect(topologyRenderStitches(third.piece, 'back').map((item) => [item.start, item.end])).toEqual([[A, B]])
     expect(topologyRenderStitches(third.piece, 'front').map((item) => [item.start, item.end])).toEqual([[B, C]])
+  })
+
+  it('keeps hidden continuation and explicit-flip workflows physically identical', () => {
+    const build = () => {
+      const first = punctureFabric(emptyEmbroideryPiece(), A, style)
+      const second = punctureFabric(first.piece, B, style)
+      const third = punctureFabric(second.piece, C, style)
+      return punctureFabric(third.piece, D, style).piece
+    }
+    const hiddenContinuation = build()
+    const mixedWithExplicitFlips = build()
+    expect(hiddenContinuation).toEqual(mixedWithExplicitFlips)
+    expect(hiddenContinuation.segments.map((segment) => segment.side)).toEqual(['back', 'front', 'back'])
+    expect(topologyRenderStitches(hiddenContinuation, 'front')).toHaveLength(1)
+    expect(topologyRenderStitches(hiddenContinuation, 'back')).toHaveLength(2)
   })
 
   it('undoes and redoes punctures with needle continuity and invalidates redo after a branch', () => {

@@ -46,7 +46,7 @@ test('responsive viewports remain stitchable, circular, unobstructed, and overfl
     const start = { x: canvasBox.x + canvasBox.width * .36, y: canvasBox.y + canvasBox.height * .42 + (item.touch ? 34 : 0) }
     if (item.touch) await page.touchscreen.tap(start.x, start.y)
     else await page.mouse.click(start.x, start.y)
-    await expect(page.locator('#status-title')).toHaveText('Needle passed through')
+    await expect(page.locator('#status-title')).toHaveText('Needle behind fabric')
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures?.length)).toBe(1)
     await page.screenshot({ path: `review/r3-flat/${item.name}.png`, fullPage: false })
   }

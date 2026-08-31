@@ -132,7 +132,7 @@ test('custom thread colors are added, selected, used, and restored after reload'
   await page.evaluate(() => {
     const target = document.querySelector<HTMLCanvasElement>('#embroidery')!
     const frames: Record<string, string> = {}
-    const midpoints: Record<string, number> = { emerge: .10, pull: .40, press: .69, pierce: .84, release: .95 }
+    const midpoints: Record<string, number> = { press: .09, pierce: .24, tighten: .52, settle: .84, release: .95 }
     const capture = () => {
       const phase = target.dataset.motionPhase
       const progress = Number(target.dataset.motionProgress)
@@ -151,7 +151,7 @@ test('custom thread colors are added, selected, used, and restored after reload'
     state.__deesewsewMotionObserver.disconnect()
     return state.__deesewsewMotionFrames
   })
-  for (const phase of ['emerge', 'pull', 'press', 'pierce', 'release']) {
+  for (const phase of ['press', 'pierce', 'tighten', 'settle', 'release']) {
     expect(motionFrames[phase], `missing captured ${phase} frame`).toBeTruthy()
     await writeFile(`review/feature-3d/stitch-motion-${phase}.png`, Buffer.from(motionFrames[phase]!.split(',')[1]!, 'base64'))
   }

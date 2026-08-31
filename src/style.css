@@ -38,7 +38,8 @@ h1 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:clamp(38px
 #embroidery-back { pointer-events:auto; }
 .hoop-shell[data-needle-available="true"][data-view-mode="manual"] { cursor:none; }
 .hoop-shell[data-interaction-state="limited"][data-needle-available="true"] { cursor:none; }
-.hoop-shell.is-inspect-only,.hoop-shell.needle-opposite { cursor:grab; }
+.hoop-shell.is-inspect-only { cursor:grab; }
+.hoop-shell.hidden-targeting[data-view-mode="manual"] { cursor:crosshair; }
 .hoop-shell.is-dragging,.hoop-shell.is-dragging #embroidery { cursor:grabbing; }
 .back-label { position:absolute; left:50%; bottom:7.5%; transform:translateX(-50%); padding:6px 10px; border:1px solid rgba(83,59,41,.16); border-radius:999px; background:rgba(238,228,211,.78); color:#6a584b; font-size:11px; line-height:1; letter-spacing:.09em; text-transform:uppercase; box-shadow:0 3px 10px rgba(65,43,28,.09); }
 .needle-state { margin:12px 0 0; min-width:220px; display:grid; grid-template-columns:30px auto; grid-template-rows:auto auto; column-gap:8px; align-items:center; padding:7px 12px; border:1px solid rgba(164,72,69,.18); border-radius:999px; background:rgba(248,244,235,.82); color:#554b44; box-shadow:0 5px 16px rgba(75,55,40,.08); }
