@@ -162,6 +162,7 @@ export function stitchRenderKey(stitch: Stitch): string {
     stitch.width,
     stitch.order,
     stitch.seed,
+    stitch.renderKind ?? 'legacy-thread',
     stitch.force ?? 'normal',
     stitch.needlePose?.azimuthDeg ?? 0,
     stitch.needlePose?.inclinationFromNormalDeg ?? 0,

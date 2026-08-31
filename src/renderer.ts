@@ -550,9 +550,15 @@ export class EmbroideryRenderer {
 
   private drawStaticStitch(ctx: CanvasRenderingContext2D, stitch: Stitch, buildup: number): void {
     const [start, end] = this.coveragePoints(stitch)
+    if (stitch.renderKind === 'puncture') {
+      this.drawNeedleHole(ctx, stitch, start)
+      return
+    }
     this.drawThread(ctx, stitch, false, buildup, start, end)
-    this.drawNeedleHole(ctx, stitch, start)
-    this.drawNeedleHole(ctx, stitch, end)
+    if (stitch.renderKind !== 'thread') {
+      this.drawNeedleHole(ctx, stitch, start)
+      this.drawNeedleHole(ctx, stitch, end)
+    }
   }
 
   private rebuildSettled(stitches: readonly Stitch[], count: number): void {
@@ -570,7 +576,7 @@ export class EmbroideryRenderer {
       const [start, end] = this.coveragePoints(stitch)
       const buildup = this.coverage.samplePath(start, end)
       this.drawStaticStitch(ctx, stitch, buildup)
-      this.coverage.addPath(start, end)
+      if (stitch.renderKind !== 'puncture') this.coverage.addPath(start, end)
     }
     ctx.restore()
     this.drawingSettled = false
@@ -592,7 +598,7 @@ export class EmbroideryRenderer {
       const [start, end] = this.coveragePoints(stitch)
       const buildup = this.coverage.samplePath(start, end)
       this.drawStaticStitch(ctx, stitch, buildup)
-      this.coverage.addPath(start, end)
+      if (stitch.renderKind !== 'puncture') this.coverage.addPath(start, end)
       this.counters.coverageAppend += 1
     }
     ctx.restore()
@@ -719,7 +725,6 @@ export class EmbroideryRenderer {
   }
 
   private drawPreview(ctx: CanvasRenderingContext2D, anchor: NormalizedPoint | null, target: NormalizedPoint | null, color: string): void {
-    if (this.side !== 'front') return
     if (anchor && target && !samePoint(anchor, target)) {
       this.drawThread(ctx, {
         id: 'preview',
@@ -744,10 +749,30 @@ export class EmbroideryRenderer {
     }
     if (target) {
       const [x, y] = this.point(target)
-      ctx.strokeStyle = 'rgba(70,52,39,.48)'
-      ctx.lineWidth = 1
-      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(x - 12, y); ctx.lineTo(x - 5, y); ctx.moveTo(x + 5, y); ctx.lineTo(x + 12, y); ctx.stroke()
+      const scale = this.size / 640
+      const angle = this.side === 'back' ? Math.PI * .18 : -Math.PI * .18
+      const length = Math.max(28, 48 * scale)
+      ctx.save()
+      ctx.translate(x, y)
+      ctx.rotate(angle)
+      ctx.shadowColor = 'rgba(45,34,27,.25)'
+      ctx.shadowBlur = Math.max(1, 3 * scale)
+      ctx.shadowOffsetY = Math.max(1, 2 * scale)
+      const metal = ctx.createLinearGradient(-length, -2, 0, 2)
+      metal.addColorStop(0, '#797d7d')
+      metal.addColorStop(.48, '#f9ffff')
+      metal.addColorStop(1, '#8c9090')
+      ctx.strokeStyle = metal
+      ctx.lineWidth = Math.max(1.4, 2.1 * scale)
+      ctx.lineCap = 'round'
+      ctx.beginPath(); ctx.moveTo(-length, 0); ctx.lineTo(1, 0); ctx.stroke()
+      ctx.shadowColor = 'transparent'
+      ctx.fillStyle = '#e5ebea'
+      ctx.beginPath(); ctx.moveTo(5 * scale, 0); ctx.lineTo(-1, -1.6 * scale); ctx.lineTo(-1, 1.6 * scale); ctx.closePath(); ctx.fill()
+      ctx.fillStyle = color
+      ctx.beginPath(); ctx.ellipse(-length * .86, 0, Math.max(1.4, 2.5 * scale), Math.max(.8, 1.3 * scale), 0, 0, Math.PI * 2); ctx.fill()
+      ctx.restore()
+      this.counters.previewDraw += 1
     }
   }
 
@@ -776,7 +801,7 @@ export class EmbroideryRenderer {
     ctx.save()
     this.clipFabric(ctx)
     this.drawPreview(ctx, anchor, target, color)
-    if (this.side === 'front' && motion) {
+    if (motion) {
       const stitch = tailMotion ? stitches.at(-1) : stitches.find((candidate) => candidate.id === motion.stitchId)
       if (stitch) this.drawMotion(ctx, stitch, motion.sample ?? sampleStitchMotionProgress(motion.progress), tailMotion)
     }
@@ -794,7 +819,7 @@ export class EmbroideryRenderer {
   ): void {
     if (!this.size) this.resize(false)
     const last = stitches.at(-1)
-    const tailMotion = this.side === 'front' && motion !== null && last?.id === motion.stitchId
+    const tailMotion = motion !== null && last?.id === motion.stitchId
     const settledCount = tailMotion ? stitches.length - 1 : stitches.length
     const plan = this.cache.plan(stitches, settledCount)
     if (plan.action === 'rebuild') this.rebuildSettled(stitches, plan.to)

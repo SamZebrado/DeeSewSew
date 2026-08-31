@@ -101,46 +101,37 @@ test('captures exact Node 2 view states, touch drag, stable stops, and lifecycle
   await page.getByRole('button', { name: /Stop rotation/ }).click()
 })
 
-test('animation interruption, rapid placement, reload, and off mode preserve deterministic stitch data', async ({ page }) => {
+test('puncture animation interruption, reload, and off mode preserve deterministic topology', async ({ page }) => {
   await clickNormalized(page, .34, .40)
-  await clickNormalized(page, .64, .50)
   await expect(page.locator('#embroidery')).toHaveAttribute('data-motion-state', 'running')
-  await page.getByRole('button', { name: /Undo last stitch/ }).click()
-  await expect.poll(() => savedStitches(page)).toHaveLength(0)
+  await page.getByRole('button', { name: /Undo last puncture/ }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures?.length ?? 0)).toBe(0)
   await page.waitForTimeout(1_250)
-  expect(await savedStitches(page)).toHaveLength(0)
-
-  await page.evaluate(() => localStorage.clear())
-  await page.reload()
-  await clickNormalized(page, .28, .36)
-  for (const point of [[.40, .43], [.52, .50], [.64, .56], [.70, .64]] as const) await clickNormalized(page, point[0], point[1])
-  expect(await savedStitches(page)).toHaveLength(4)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures?.length ?? 0)).toBe(0)
 
   await page.evaluate(() => localStorage.clear())
   await page.reload()
   await clickNormalized(page, .32, .39)
-  await clickNormalized(page, .67, .55)
   await expect(page.locator('#embroidery')).toHaveAttribute('data-motion-state', 'running')
   await page.reload()
-  await expect.poll(() => savedStitches(page)).toHaveLength(1)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures?.length)).toBe(1)
+  await expect(page.locator('#hoop-shell')).toHaveAttribute('data-needle-side', 'back')
   await expect(page.locator('#embroidery')).toHaveAttribute('data-motion-state', 'idle')
 
   await page.evaluate(() => localStorage.clear())
   await page.reload()
   await clickNormalized(page, .31, .38)
-  await clickNormalized(page, .68, .54)
   await expect(page.locator('#embroidery')).toHaveAttribute('data-motion-state', 'idle', { timeout: 2_000 })
-  const animatedStitch = (await savedStitches(page))[0]
+  const animatedTopology = await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}'))
   const animatedPixels = await page.locator('#embroidery').evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())
 
   await page.evaluate(() => localStorage.clear())
   await page.reload()
   await page.getByRole('button', { name: /Stitch motion/ }).click()
   await clickNormalized(page, .31, .38)
-  await clickNormalized(page, .68, .54)
-  const immediateStitch = (await savedStitches(page))[0]
+  const immediateTopology = await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}'))
   const immediatePixels = await page.locator('#embroidery').evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())
-  expect(immediateStitch).toEqual(animatedStitch)
+  expect(immediateTopology).toEqual(animatedTopology)
   expect(immediatePixels).toBe(animatedPixels)
 })
 
@@ -162,7 +153,7 @@ test('custom colors survive malformed optional settings, switching, history, rel
   })
   await page.reload()
   await expect(page.getByRole('radio', { name: 'Custom #ABCDEF' })).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByRole('button', { name: /Undo last stitch/ })).toBeEnabled()
+  await expect(page.getByRole('button', { name: /Undo last puncture/ })).toBeEnabled()
 
   await page.locator('#custom-color').fill('#123456')
   await page.getByRole('button', { name: 'Add color' }).click()
@@ -171,21 +162,32 @@ test('custom colors survive malformed optional settings, switching, history, rel
   await expect(page.getByRole('radio', { name: 'Poppy' })).toHaveAttribute('aria-checked', 'true')
   await page.getByRole('radio', { name: 'Custom #123456' }).click()
   await clickNormalized(page, .42, .34)
-  await clickNormalized(page, .66, .61)
-  expect((await savedStitches(page)).at(-1)?.color).toBe('#123456')
-  await page.getByRole('button', { name: /Undo last stitch/ }).click()
-  expect(await savedStitches(page)).toHaveLength(1)
-  await page.getByRole('button', { name: /Redo last stitch/ }).click()
-  expect(await savedStitches(page)).toHaveLength(2)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures[0].color)).toBe('#123456')
+  await page.getByRole('button', { name: /Undo last puncture/ }).click()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures)).toHaveLength(0)
+  await page.getByRole('button', { name: /Redo last puncture/ }).click()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures)).toHaveLength(1)
   await page.reload()
   await expect(page.getByRole('radio', { name: 'Custom #123456' })).toHaveAttribute('aria-checked', 'true')
 })
 
-test('1,000-stitch development scene remains interactively bounded with renderer cache counters', async ({ page }) => {
+test('1,000-segment Node 3 topology remains interactively bounded with renderer cache counters', async ({ page }) => {
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('./')
+  await page.evaluate(() => {
+    const punctures = Array.from({ length: 1_001 }, (_, index) => {
+      const order = index + 1
+      const angle = order * .41
+      const radius = .12 + (order % 7) * .035
+      const fromSide = order % 2 === 1 ? 'front' : 'back'
+      return { id: `puncture-${order}`, position: { x: .5 + Math.cos(angle) * radius, y: .5 + Math.sin(angle) * radius }, fromSide, toSide: fromSide === 'front' ? 'back' : 'front', order, seed: order * 101, type: order % 3 ? 'running' : 'back', color: order % 2 ? '#b9403c' : '#425f86' }
+    })
+    const segments = punctures.slice(1).map((puncture, index) => ({ id: `segment-${puncture.order}`, startPunctureId: punctures[index]!.id, endPunctureId: puncture.id, start: punctures[index]!.position, end: puncture.position, side: puncture.fromSide, order: puncture.order, type: puncture.type, color: puncture.color, width: puncture.type === 'back' ? 4.2 : 3.8, seed: puncture.order * 103 }))
+    localStorage.setItem('deesewsew-piece-v1', JSON.stringify({ schemaVersion: 3, nextOrder: 1_002, needle: { side: 'back', position: punctures.at(-1)!.position, lastPunctureId: punctures.at(-1)!.id }, punctures, segments, legacyFrontStitches: [] }))
+  })
   const startedAt = Date.now()
-  await page.goto('./?scene=stress')
+  await page.reload()
   await expect(page.locator('#embroidery')).toBeVisible()
   const initialLoadMs = Date.now() - startedAt
   const rotateStartedAt = Date.now()
@@ -193,24 +195,35 @@ test('1,000-stitch development scene remains interactively bounded with renderer
   await page.waitForTimeout(500)
   await page.getByRole('button', { name: /Stop rotation/ }).click()
   const rotateStopMs = Date.now() - rotateStartedAt
-  await page.getByRole('button', { name: 'Return front' }).click()
+  await page.getByRole('button', { name: 'Snap back' }).click()
+  const hoop = page.locator('#hoop-shell')
+  await hoop.scrollIntoViewIfNeeded()
+  const box = await hoop.boundingBox()
+  if (!box) throw new Error('Stress hoop has no box')
   const previewStartedAt = Date.now()
-  await clickNormalized(page, .30, .36)
-  const { box } = await canvasBox(page)
-  await page.mouse.move(box.x + box.width * .62, box.y + box.height * .55)
+  await page.mouse.move(box.x + box.width * .42, box.y + box.height * .55)
   await page.waitForTimeout(50)
   const previewMs = Date.now() - previewStartedAt
   const commitStartedAt = Date.now()
-  await page.mouse.click(box.x + box.width * .62, box.y + box.height * .55)
+  await page.mouse.click(box.x + box.width * .42, box.y + box.height * .55)
   const commitMs = Date.now() - commitStartedAt
-  const counters = await page.locator('#embroidery').evaluate((canvas) => (canvas as unknown as Record<string, unknown>).__deesewsewRendererCounters)
-  const report = { method: 'Playwright wall-clock around real Chrome operations; 1,000-stitch Vite development scene', initialLoadMs, rotateStopMs, previewMs, commitMs, counters, pageErrors }
-  await writeFile(`${evidenceDir}/performance-1000-stitches.json`, `${JSON.stringify(report, null, 2)}\n`)
+  const undoStartedAt = Date.now()
+  await page.getByRole('button', { name: 'Undo last puncture' }).click()
+  const undoMs = Date.now() - undoStartedAt
+  const countersBeforeReload = await page.locator('#embroidery-back').evaluate((canvas) => (canvas as unknown as Record<string, unknown>).__deesewsewRendererCounters)
+  const reloadStartedAt = Date.now()
+  await page.reload()
+  const reloadMs = Date.now() - reloadStartedAt
+  const countersAfterReload = await page.locator('#embroidery-back').evaluate((canvas) => (canvas as unknown as Record<string, unknown>).__deesewsewRendererCounters)
+  const report = { method: 'Playwright wall-clock around real Chrome operations; 1,000 true Node 3 surface segments split across both faces', initialLoadMs, rotateStopMs, previewMs, commitMs, undoMs, reloadMs, countersBeforeReload, countersAfterReload, pageErrors }
+  await writeFile(`${evidenceDir}/performance-1000-segments.json`, `${JSON.stringify(report, null, 2)}\n`)
   expect(pageErrors).toEqual([])
   expect(initialLoadMs).toBeLessThan(5_000)
   expect(rotateStopMs).toBeLessThan(2_000)
   expect(previewMs).toBeLessThan(1_500)
   expect(commitMs).toBeLessThan(1_500)
+  expect(undoMs).toBeLessThan(1_500)
+  expect(reloadMs).toBeLessThan(5_000)
 })
 
 test('advanced experiments have no public DOM, storage, query, shortcut, or remote-network entry point', async ({ page }) => {

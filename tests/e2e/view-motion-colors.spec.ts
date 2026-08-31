@@ -95,8 +95,8 @@ test('3D view auto-rotates, freezes, supports rim drag, and snaps between faces'
   const stitchBox = await canvas.boundingBox()
   if (!stitchBox) throw new Error('Front canvas has no bounding box after returning from drag')
   await page.mouse.click(stitchBox.x + stitchBox.width * .35, stitchBox.y + stitchBox.height * .42)
-  await page.mouse.click(stitchBox.x + stitchBox.width * .62, stitchBox.y + stitchBox.height * .52)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{"stitches":[]}').stitches.length)).toBe(initialCount + 1)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures?.length)).toBe(1)
+  await expect(hoop).toHaveAttribute('data-needle-side', 'back')
 })
 
 test('stitch motion can be disabled and stays disabled without affecting saved stitches', async ({ page }) => {
@@ -112,9 +112,8 @@ test('stitch motion can be disabled and stays disabled without affecting saved s
   const box = await canvas.boundingBox()
   if (!box) throw new Error('Canvas has no bounding box')
   await page.mouse.click(box.x + box.width * .34, box.y + box.height * .40)
-  await page.mouse.click(box.x + box.width * .64, box.y + box.height * .50)
   await expect(canvas).toHaveAttribute('data-motion-state', 'off')
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{"stitches":[]}').stitches.length)).toBe(1)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures?.length)).toBe(1)
 })
 
 test('custom thread colors are added, selected, used, and restored after reload', async ({ page }) => {
@@ -130,7 +129,6 @@ test('custom thread colors are added, selected, used, and restored after reload'
   await canvas.scrollIntoViewIfNeeded()
   const box = await canvas.boundingBox()
   if (!box) throw new Error('Canvas has no bounding box')
-  await page.mouse.click(box.x + box.width * .35, box.y + box.height * .40)
   await page.evaluate(() => {
     const target = document.querySelector<HTMLCanvasElement>('#embroidery')!
     const frames: Record<string, string> = {}
@@ -157,11 +155,10 @@ test('custom thread colors are added, selected, used, and restored after reload'
     expect(motionFrames[phase], `missing captured ${phase} frame`).toBeTruthy()
     await writeFile(`review/feature-3d/stitch-motion-${phase}.png`, Buffer.from(motionFrames[phase]!.split(',')[1]!, 'base64'))
   }
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{"stitches":[]}').stitches[0]?.color)).toBe(customColor)
-  const savedStitch = await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{"stitches":[]}').stitches[0])
-  expect(savedStitch.needleStart.x).toBeCloseTo(.35, 2)
-  expect(savedStitch.needleEnd.x).toBeCloseTo(.63, 2)
-  expect(savedStitch.end.x).toBeLessThan(savedStitch.needleEnd.x)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures?.[0]?.color)).toBe(customColor)
+  const savedPuncture = await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{}').punctures[0])
+  expect(savedPuncture.position.x).toBeCloseTo(.63, 2)
+  expect(savedPuncture.position.y).toBeCloseTo(.52, 2)
 
   await page.reload()
   await expect(page.getByRole('radio', { name: 'Custom #1A9C8D' })).toHaveAttribute('aria-checked', 'true')

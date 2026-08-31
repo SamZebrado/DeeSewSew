@@ -1,3 +1,5 @@
+import { classifyFabricInteraction, type FabricInteractionState } from './fabric-projection'
+
 export type HoopFace = 'front' | 'edge' | 'back'
 export type AlignedHoopFace = 'front' | 'back' | null
 export type HoopViewMode = 'manual' | 'auto'
@@ -10,6 +12,7 @@ export interface HoopViewSnapshot {
   alignedFace: AlignedHoopFace
   frontAligned: boolean
   backAligned: boolean
+  interactionState: FabricInteractionState
   stitchable: boolean
   gestureActive: boolean
 }
@@ -89,6 +92,7 @@ export class HoopViewController {
     const facing = Math.cos(yaw * Math.PI / 180)
     const face: HoopFace = facing >= EDGE_FACING_THRESHOLD ? 'front' : facing <= -EDGE_FACING_THRESHOLD ? 'back' : 'edge'
     const alignedFace: AlignedHoopFace = frontAligned ? 'front' : backAligned ? 'back' : null
+    const interactionState = classifyFabricInteraction({ yawDeg: yaw, pitchDeg: this.pitchDeg })
     return {
       yawDeg: yaw,
       pitchDeg: this.pitchDeg,
@@ -97,7 +101,8 @@ export class HoopViewController {
       alignedFace,
       frontAligned,
       backAligned,
-      stitchable: frontAligned && this.mode === 'manual' && this.gesture === null,
+      interactionState,
+      stitchable: interactionState !== 'inspect-only' && this.mode === 'manual' && this.gesture === null,
       gestureActive: this.gesture !== null,
     }
   }
