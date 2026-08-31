@@ -1,8 +1,8 @@
 import type { NormalizedPoint } from './stitch-model'
 
 export class ThreadCoverage {
-  private resolution: number
-  private cells: Float32Array
+  private readonly resolution: number
+  private readonly cells: Float32Array
 
   constructor(resolution = 96) {
     this.resolution = resolution
@@ -15,32 +15,45 @@ export class ThreadCoverage {
     return gy * this.resolution + gx
   }
 
-  private samples(start: NormalizedPoint, end: NormalizedPoint): NormalizedPoint[] {
+  private forEachSample(start: NormalizedPoint, end: NormalizedPoint, visit: (x: number, y: number) => void): number {
     const count = Math.max(4, Math.ceil(Math.hypot(end.x - start.x, end.y - start.y) * this.resolution * 1.5))
-    return Array.from({ length: count + 1 }, (_, index) => {
+    for (let index = 0; index <= count; index += 1) {
       const amount = index / count
-      return { x: start.x + (end.x - start.x) * amount, y: start.y + (end.y - start.y) * amount }
-    })
+      visit(start.x + (end.x - start.x) * amount, start.y + (end.y - start.y) * amount)
+    }
+    return count + 1
+  }
+
+  private sampleCell(x: number, y: number): number {
+    const center = this.cell(x, y)
+    const cx = center % this.resolution
+    const cy = Math.floor(center / this.resolution)
+    let sum = 0
+    let count = 0
+    for (let oy = -1; oy <= 1; oy += 1) for (let ox = -1; ox <= 1; ox += 1) {
+      const sampleX = cx + ox
+      const sampleY = cy + oy
+      if (sampleX >= 0 && sampleX < this.resolution && sampleY >= 0 && sampleY < this.resolution) {
+        sum += this.cells[sampleY * this.resolution + sampleX]
+        count += 1
+      }
+    }
+    return count ? sum / count : 0
+  }
+
+  clear(): void {
+    this.cells.fill(0)
   }
 
   samplePath(start: NormalizedPoint, end: NormalizedPoint): number {
-    const values = this.samples(start, end).map((point) => {
-      const center = this.cell(point.x, point.y)
-      const cx = center % this.resolution
-      const cy = Math.floor(center / this.resolution)
-      let sum = 0; let count = 0
-      for (let oy = -1; oy <= 1; oy += 1) for (let ox = -1; ox <= 1; ox += 1) {
-        const x = cx + ox; const y = cy + oy
-        if (x >= 0 && x < this.resolution && y >= 0 && y < this.resolution) { sum += this.cells[y * this.resolution + x]; count += 1 }
-      }
-      return count ? sum / count : 0
-    })
-    return values.reduce((sum, value) => sum + value, 0) / values.length
+    let sum = 0
+    const samples = this.forEachSample(start, end, (x, y) => { sum += this.sampleCell(x, y) })
+    return samples ? sum / samples : 0
   }
 
   addPath(start: NormalizedPoint, end: NormalizedPoint): void {
-    for (const point of this.samples(start, end)) {
-      const center = this.cell(point.x, point.y)
+    this.forEachSample(start, end, (sampleX, sampleY) => {
+      const center = this.cell(sampleX, sampleY)
       const cx = center % this.resolution
       const cy = Math.floor(center / this.resolution)
       for (let oy = -1; oy <= 1; oy += 1) for (let ox = -1; ox <= 1; ox += 1) {
@@ -50,6 +63,6 @@ export class ThreadCoverage {
           this.cells[y * this.resolution + x] += falloff
         }
       }
-    }
+    })
   }
 }

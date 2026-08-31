@@ -16,18 +16,21 @@ test('responsive viewports remain stitchable, circular, unobstructed, and overfl
     expect(page.viewportSize()).toEqual({ width: item.width, height: item.height })
 
     const canvas = page.locator('#embroidery')
+    const hoop = page.locator('.hoop-shell')
     const tools = page.locator('.tools')
     await expect(canvas).toBeVisible()
     await expect(tools).toBeVisible()
+    const hoopBox = await hoop.boundingBox()
     const canvasBox = await canvas.boundingBox()
     const toolsBox = await tools.boundingBox()
-    if (!canvasBox || !toolsBox) throw new Error(`${item.name}: missing layout box`)
+    if (!hoopBox || !canvasBox || !toolsBox) throw new Error(`${item.name}: missing layout box`)
+    expect(Math.abs(hoopBox.width - hoopBox.height)).toBeLessThan(1)
     expect(Math.abs(canvasBox.width - canvasBox.height)).toBeLessThan(1)
 
-    const overlaps = canvasBox.x < toolsBox.x + toolsBox.width
-      && canvasBox.x + canvasBox.width > toolsBox.x
-      && canvasBox.y < toolsBox.y + toolsBox.height
-      && canvasBox.y + canvasBox.height > toolsBox.y
+    const overlaps = hoopBox.x < toolsBox.x + toolsBox.width
+      && hoopBox.x + hoopBox.width > toolsBox.x
+      && hoopBox.y < toolsBox.y + toolsBox.height
+      && hoopBox.y + hoopBox.height > toolsBox.y
     expect(overlaps, `${item.name}: controls overlap the hoop`).toBe(false)
 
     const metrics = await page.evaluate(() => ({
