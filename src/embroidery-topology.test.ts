@@ -90,6 +90,15 @@ describe('needle-first surface topology', () => {
     expect(deserializeEmbroideryPiece(JSON.stringify(falseSurface))).toEqual(emptyEmbroideryPiece())
   })
 
+  it('fails closed when canonical surface segment IDs are duplicated', () => {
+    const first = punctureFabric(emptyEmbroideryPiece(), A, style)
+    const second = punctureFabric(first.piece, B, style)
+    const valid = punctureFabric(second.piece, C, style).piece
+    const duplicateSegmentId = JSON.parse(serializeEmbroideryPiece(valid))
+    duplicateSegmentId.segments[1].id = duplicateSegmentId.segments[0].id
+    expect(deserializeEmbroideryPiece(JSON.stringify(duplicateSegmentId))).toEqual(emptyEmbroideryPiece())
+  })
+
   it('ignores unknown future fields without weakening canonical invariants', () => {
     const first = punctureFabric(emptyEmbroideryPiece(), A, style)
     const serialized = JSON.parse(serializeEmbroideryPiece(first.piece))

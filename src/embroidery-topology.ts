@@ -343,6 +343,8 @@ function parseV3(raw: string): EmbroideryPieceV3 | null {
   const segments = source.segments.map((segment) => parseSegment(segment, punctureIds))
   if (segments.some((segment) => !segment)) return null
   const typedSegments = (segments as SurfaceThreadSegmentV3[]).sort((left, right) => left.order - right.order)
+  const segmentIds = new Set(typedSegments.map((segment) => segment.id))
+  if (segmentIds.size !== typedSegments.length) return null
   if (typedSegments.length !== Math.max(0, typedPunctures.length - 1)) return null
   for (let index = 1; index < typedPunctures.length; index += 1) {
     const previous = typedPunctures[index - 1]!
