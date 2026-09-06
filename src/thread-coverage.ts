@@ -44,6 +44,11 @@ export class ThreadCoverage {
   clear(): void {
     this.cells.fill(0)
   }
+  clone(): ThreadCoverage {
+    const copy = new ThreadCoverage(this.resolution)
+    copy.cells.set(this.cells)
+    return copy
+  }
 
   samplePath(start: NormalizedPoint, end: NormalizedPoint): number {
     let sum = 0

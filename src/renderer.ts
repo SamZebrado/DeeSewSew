@@ -19,7 +19,8 @@ import {
 import { FABRIC_RADIUS, interpolate, type NormalizedPoint, type Stitch } from './stitch-model'
 import { sampleStitchMotionProgress, type StitchMotionSampleV2 } from './stitch-motion'
 import { ThreadCoverage } from './thread-coverage'
-import { tightenActiveThread } from './active-thread'
+import { looseThreadPath, tightenThreadPath, type CubicThreadPath } from './thread-path'
+import { needlePose } from './needle-pose'
 
 export type HoopSide = 'front' | 'back'
 
@@ -374,6 +375,15 @@ export class EmbroideryRenderer {
     }
   }
 
+  private settledThreadPath(stitch: Stitch, start: NormalizedPoint, end: NormalizedPoint, buildup: number): ThreadPath {
+    const path = this.pathFor(stitch, start, end)
+    const spread = [0, .75, -.75, 1.5, -1.5, 2.25, -2.25, 3, -3]
+    const lift = (seededUnit(stitch.seed) - .5) * .9 + (spread[Math.min(8, Math.round(buildup))] ?? 0)
+    path.c1x += path.nx * lift * 4 / 3; path.c2x += path.nx * lift * 4 / 3
+    path.c1y += path.ny * lift * 4 / 3; path.c2y += path.ny * lift * 4 / 3
+    return path
+  }
+
   private tracePath(ctx: CanvasRenderingContext2D, path: ThreadPath, offsetX = 0, offsetY = 0): void {
     ctx.beginPath()
     ctx.moveTo(path.x1 + offsetX, path.y1 + offsetY)
@@ -476,9 +486,11 @@ export class EmbroideryRenderer {
     buildup: number,
     start = stitch.start,
     end = stitch.end,
+    curves?: readonly CubicThreadPath[],
+    detailProgress = 1,
   ): void {
     if (samePoint(start, end)) return
-    const path = this.pathFor(stitch, start, end)
+    const path = this.settledThreadPath(stitch, start, end, buildup)
     const cachedStyle = this.threadStyleCache.get(stitch)
     const style = cachedStyle?.lightingKey === this.lightingKey
       ? cachedStyle.style
@@ -486,12 +498,12 @@ export class EmbroideryRenderer {
     if (!cachedStyle || cachedStyle.lightingKey !== this.lightingKey) {
       this.threadStyleCache.set(stitch, { lightingKey: this.lightingKey, style })
     }
-    const spreadOrder = [0, 0.75, -0.75, 1.5, -1.5, 2.25, -2.25, 3, -3]
-    const stackSpread = spreadOrder[Math.min(spreadOrder.length - 1, Math.round(buildup))] ?? 0
-    const lift = (seededUnit(stitch.seed) - 0.5) * 0.9 + stackSpread
     const width = stitch.width * style.widthScale * (this.size / 640) * (preview ? 0.9 : 1)
-    const liftX = path.nx * lift
-    const liftY = path.ny * lift
+    const trace = (offsetX = 0, offsetY = 0) => {
+      if (curves) {
+        ctx.save(); ctx.translate(offsetX, offsetY); this.traceCubicThread(ctx, curves); ctx.restore()
+      } else this.tracePath(ctx, path, offsetX, offsetY)
+    }
     const [lightX, lightY] = this.lightVector()
     const shadowScale = this.size / 640
     const shadowOffset = Math.min(7, this.lighting.shadowOffsetAt640 * shadowScale)
@@ -502,14 +514,13 @@ export class EmbroideryRenderer {
     ctx.lineJoin = 'round'
     ctx.strokeStyle = `rgba(55,38,29,${Math.min(0.5, this.lighting.shadowOpacity + 0.08 + buildup * 0.014)})`
     ctx.lineWidth = width + 2.6 + Math.min(1.5, buildup * 0.12)
-    this.tracePath(ctx, path, liftX + lightX * shadowOffset, liftY + lightY * shadowOffset)
+    trace(lightX * shadowOffset, lightY * shadowOffset)
 
     ctx.strokeStyle = style.darkColor
     ctx.lineWidth = width + 0.9
-    this.tracePath(ctx, path, liftX, liftY)
+    trace()
 
-    const middleX = (path.x1 + path.x2) / 2 + liftX
-    const middleY = (path.y1 + path.y2) / 2 + liftY
+    const [middleX, middleY] = this.pathPoint(path, .5)
     const sideLight = lightX * path.nx + lightY * path.ny
     const highlightCenter = sideLight >= 0 ? 0.32 : 0.68
     const half = Math.max(1, width * 0.72)
@@ -521,57 +532,31 @@ export class EmbroideryRenderer {
     tube.addColorStop(1, style.darkColor)
     ctx.strokeStyle = tube
     ctx.lineWidth = width
-    this.tracePath(ctx, path, liftX, liftY)
+    trace()
 
     const highlightOffset = (highlightCenter - 0.5) * width
     ctx.strokeStyle = `rgba(255,255,255,${style.specularAlpha})`
     ctx.lineWidth = Math.max(0.38, width * (0.05 + (1 - style.highlightSharpness) * 0.09))
-    this.tracePath(ctx, path, liftX + path.nx * highlightOffset, liftY + path.ny * highlightOffset)
-    if (!preview) this.drawThreadDetails(ctx, stitch, path, width, style)
+    trace(path.nx * highlightOffset, path.ny * highlightOffset)
+    if (!preview && detailProgress > 0) {
+      ctx.globalAlpha *= detailProgress
+      this.drawThreadDetails(ctx, stitch, path, width, style)
+    }
     ctx.restore()
   }
 
-  private traceActiveThread(ctx: CanvasRenderingContext2D, points: readonly NormalizedPoint[]): void {
-    const projected = points.map((point) => this.point(point))
-    const first = projected[0]
-    if (!first) return
+  private traceCubicThread(ctx: CanvasRenderingContext2D, curves: readonly CubicThreadPath[]): void {
+    if (!curves.length) return
     ctx.beginPath()
-    ctx.moveTo(first[0], first[1])
-    for (let index = 1; index < projected.length - 1; index += 1) {
-      const point = projected[index]!
-      const next = projected[index + 1]!
-      ctx.quadraticCurveTo(point[0], point[1], (point[0] + next[0]) / 2, (point[1] + next[1]) / 2)
-    }
-    const last = projected.at(-1)!
-    ctx.lineTo(last[0], last[1])
+    ctx.moveTo(...this.point(curves[0]![0]))
+    for (const curve of curves) ctx.bezierCurveTo(...this.point(curve[1]), ...this.point(curve[2]), ...this.point(curve[3]))
     ctx.stroke()
   }
 
-  private drawActiveThread(ctx: CanvasRenderingContext2D, points: readonly NormalizedPoint[], color: string, alpha = .82): void {
+  private drawActiveThread(ctx: CanvasRenderingContext2D, points: readonly NormalizedPoint[], color: string): void {
     if (points.length < 2) return
-    const scale = this.size / 640
-    const width = 3.8 * scale
-    ctx.save()
-    ctx.globalAlpha = alpha
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.strokeStyle = 'rgba(52,37,29,.28)'
-    ctx.lineWidth = width + 3
-    ctx.shadowColor = 'rgba(45,32,24,.18)'
-    ctx.shadowBlur = Math.max(1, 3 * scale)
-    ctx.shadowOffsetY = Math.max(.8, 2 * scale)
-    this.traceActiveThread(ctx, points)
-    ctx.shadowColor = 'transparent'
-    ctx.strokeStyle = shadeColor(color, -32, this.lighting.warmth)
-    ctx.lineWidth = width + .8
-    this.traceActiveThread(ctx, points)
-    ctx.strokeStyle = color
-    ctx.lineWidth = width
-    this.traceActiveThread(ctx, points)
-    ctx.strokeStyle = 'rgba(255,255,255,.34)'
-    ctx.lineWidth = Math.max(.4, width * .14)
-    this.traceActiveThread(ctx, points)
-    ctx.restore()
+    const live: Stitch = { id: 'live', type: 'running', start: points[0]!, end: points.at(-1)!, color, width: 3.8, order: 0, seed: 17 }
+    this.drawThread(ctx, live, false, 0, live.start, live.end, looseThreadPath(points), 0)
   }
 
   private coveragePoints(stitch: Stitch): [NormalizedPoint, NormalizedPoint] {
@@ -720,24 +705,18 @@ export class EmbroideryRenderer {
 
   private drawNeedle(ctx: CanvasRenderingContext2D, stitch: Stitch, sample: StitchMotionSampleV2): void {
     if (sample.needleOpacity <= 0) return
-    const start = stitch.needleStart ?? stitch.start
     const end = stitch.needleEnd ?? stitch.end
-    const contact = end
-    const [contactX, contactY] = this.point(contact)
-    const chordX = end.x - start.x
-    const chordY = end.y - start.y
-    const stablePose = (stitch.needlePose?.inclinationFromNormalDeg ?? 0) >= 5
-    const angle = stablePose
-      ? (stitch.needlePose?.azimuthDeg ?? 0) * Math.PI / 180
-      : Math.atan2(chordY, this.side === 'back' ? -chordX : chordX)
+    const pose = needlePose(end)
+    const [contactX, contactY] = this.point(pose.tip)
+    const [tailX, tailY] = this.point(interpolate(pose.tail, pose.tip, sample.threadPull))
+    const angle = Math.atan2(contactY - tailY, contactX - tailX)
     const scale = this.size / 640
-    const length = Math.max(18, 34 * scale)
-    const depthShift = sample.needlePosition * Math.max(2, 7 * scale)
+    const length = Math.hypot(contactX - tailX, contactY - tailY)
     const [lightX, lightY] = this.lightVector()
 
     ctx.save()
     ctx.globalAlpha = clampUnit(sample.needleOpacity)
-    ctx.translate(contactX - lightX * depthShift, contactY - lightY * depthShift)
+    ctx.translate(contactX, contactY)
     ctx.rotate(angle)
     const needle = ctx.createLinearGradient(0, -2.5 * scale, 0, 2.5 * scale)
     needle.addColorStop(0, '#777b7b')
@@ -750,19 +729,26 @@ export class EmbroideryRenderer {
     ctx.shadowBlur = Math.min(4, this.lighting.shadowBlurAt640 * scale * 0.18)
     ctx.shadowOffsetX = lightX * Math.min(3, this.lighting.shadowOffsetAt640 * scale * 0.25)
     ctx.shadowOffsetY = lightY * Math.min(3, this.lighting.shadowOffsetAt640 * scale * 0.25)
-    ctx.beginPath(); ctx.moveTo(-length * 0.48, 0); ctx.lineTo(length * 0.48, 0); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(-length, 0); ctx.lineTo(0, 0); ctx.stroke()
     ctx.shadowColor = 'transparent'
     ctx.fillStyle = shadeColor(stitch.color, 10, this.lighting.warmth)
-    ctx.beginPath(); ctx.ellipse(-length * 0.42, 0, Math.max(1.2, 2.2 * scale), Math.max(0.8, 1.35 * scale), 0, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(-length * .86, 0, Math.max(1.2, 2.2 * scale), Math.max(0.8, 1.35 * scale), 0, 0, Math.PI * 2); ctx.fill()
     ctx.fillStyle = '#d9dddd'
-    ctx.beginPath(); ctx.moveTo(length * 0.53, 0); ctx.lineTo(length * 0.43, -Math.max(0.65, scale)); ctx.lineTo(length * 0.43, Math.max(0.65, scale)); ctx.closePath(); ctx.fill()
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-3 * scale, -Math.max(0.65, scale)); ctx.lineTo(-3 * scale, Math.max(0.65, scale)); ctx.closePath(); ctx.fill()
     ctx.restore()
   }
 
-  private drawMotion(ctx: CanvasRenderingContext2D, stitch: Stitch, motion: StitchMotion, sample: StitchMotionSampleV2, drawThread: boolean): void {
+  private drawMotion(ctx: CanvasRenderingContext2D, stitch: Stitch, motion: StitchMotion, sample: StitchMotionSampleV2, drawThread: boolean, buildupOverride?: number): void {
     this.drawDimple(ctx, stitch, sample)
     if (drawThread && motion.loosePoints && motion.loosePoints.length >= 2) {
-      this.drawActiveThread(ctx, tightenActiveThread(motion.loosePoints, stitch.start, stitch.end, sample.threadPull), stitch.color, 1)
+      const [start, end] = this.coveragePoints(stitch)
+      const buildup = buildupOverride ?? this.buildupForDynamic(stitch)
+      const path = this.settledThreadPath(stitch, start, end, buildup)
+      const unproject = (x: number, y: number): NormalizedPoint => ({ x: this.side === 'back' ? 1 - x / this.size : x / this.size, y: y / this.size })
+      const goal: CubicThreadPath = [unproject(path.x1, path.y1), unproject(path.c1x, path.c1y), unproject(path.c2x, path.c2y), unproject(path.x2, path.y2)]
+      const curves = tightenThreadPath(looseThreadPath(motion.loosePoints), goal, sample.threadPull)
+      if (sample.threadPull < 1) this.drawThread(ctx, { ...stitch, width: 3.8 + (stitch.width - 3.8) * sample.threadPull }, false, buildup, start, end, curves, Math.max(0, (sample.threadPull - .9) * 10))
+      else this.drawThread(ctx, stitch, false, buildup, start, end)
     } else if (drawThread && sample.threadPull > 0) {
       const needleStart = stitch.needleStart ?? stitch.start
       const needleEnd = stitch.needleEnd ?? stitch.end
@@ -823,10 +809,12 @@ export class EmbroideryRenderer {
     }
     if (transient?.emergenceTarget) this.drawEmergenceTarget(ctx, transient.emergenceTarget, color)
     if (target && transient?.needleVisible !== false) {
-      const [x, y] = this.point(target)
+      const pose = needlePose(target)
+      const [x, y] = this.point(pose.tip)
       const scale = this.size / 640
-      const angle = this.side === 'back' ? Math.PI * .18 : -Math.PI * .18
-      const length = Math.max(28, 48 * scale)
+      const [tailX, tailY] = this.point(pose.tail)
+      const angle = Math.atan2(y - tailY, x - tailX)
+      const length = Math.hypot(x - tailX, y - tailY)
       ctx.save()
       ctx.translate(x, y)
       ctx.rotate(angle)
@@ -840,10 +828,10 @@ export class EmbroideryRenderer {
       ctx.strokeStyle = metal
       ctx.lineWidth = Math.max(1.4, 2.1 * scale)
       ctx.lineCap = 'round'
-      ctx.beginPath(); ctx.moveTo(-length, 0); ctx.lineTo(1, 0); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(-length, 0); ctx.lineTo(0, 0); ctx.stroke()
       ctx.shadowColor = 'transparent'
       ctx.fillStyle = '#e5ebea'
-      ctx.beginPath(); ctx.moveTo(5 * scale, 0); ctx.lineTo(-1, -1.6 * scale); ctx.lineTo(-1, 1.6 * scale); ctx.closePath(); ctx.fill()
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-3 * scale, -1.6 * scale); ctx.lineTo(-3 * scale, 1.6 * scale); ctx.closePath(); ctx.fill()
       ctx.fillStyle = color
       ctx.beginPath(); ctx.ellipse(-length * .86, 0, Math.max(1.4, 2.5 * scale), Math.max(.8, 1.3 * scale), 0, 0, Math.PI * 2); ctx.fill()
       ctx.restore()
@@ -893,8 +881,37 @@ export class EmbroideryRenderer {
     color: string,
     motion: StitchMotion | null = null,
     transient?: TransientThreadVisual,
+    tails: readonly StitchMotion[] = [],
   ): void {
     if (!this.size) this.resize(false)
+    if (tails.length) {
+      const transitions = [...tails, ...(motion ? [motion] : [])]
+      const ids = new Set(transitions.map(item => item.stitchId))
+      const first = stitches.findIndex(item => ids.has(item.id))
+      const settledCount = first < 0 ? stitches.length : first
+      const plan = this.cache.plan(stitches, settledCount)
+      if (plan.action === 'rebuild') this.rebuildSettled(stitches, plan.to)
+      else if (plan.action === 'append') this.appendSettled(stitches, plan.from, plan.to)
+      this.cache.accept(stitches, plan)
+      const ctx = this.context
+      ctx.clearRect(0, 0, this.size, this.size)
+      ctx.drawImage(this.settledCanvas, 0, 0, this.settledCanvas.width, this.settledCanvas.height, 0, 0, this.size, this.size)
+      this.counters.cacheBlit += 1
+      const coverage = this.coverage.clone()
+      ctx.save(); this.clipFabric(ctx)
+      for (const stitch of stitches.slice(settledCount)) {
+        const [start, end] = this.coveragePoints(stitch)
+        const buildup = coverage.samplePath(start, end)
+        const transition = transitions.find(item => item.stitchId === stitch.id)
+        if (transition) this.drawMotion(ctx, stitch, transition, transition.sample ?? sampleStitchMotionProgress(transition.progress), true, buildup)
+        else this.drawStaticStitch(ctx, stitch, buildup)
+        if (stitch.renderKind !== 'puncture') coverage.addPath(start, end)
+      }
+      this.drawPreview(ctx, anchor, target, color, transient)
+      ctx.restore(); this.drawInnerRim(ctx)
+      this.counters.dynamicDraw += 1
+      return
+    }
     const last = stitches.at(-1)
     const tailMotion = motion !== null && last?.id === motion.stitchId
     const settledCount = tailMotion ? stitches.length - 1 : stitches.length

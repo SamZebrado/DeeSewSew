@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EmbroideryRenderer } from './renderer'
 import type { Stitch } from './stitch-model'
+import { looseThreadPath, tightenThreadPath, sampleThreadPath, type CubicThreadPath } from './thread-path'
 
 class FakeGradient {
   addColorStop(): void {}
@@ -82,6 +83,28 @@ describe('EmbroideryRenderer settled cache integration', () => {
   })
 
   afterEach(() => vi.unstubAllGlobals())
+
+  it('production settled evaluator tapers buildup at holes and matches tightening for both sides', () => {
+    for (const side of ['front', 'back'] as const) for (const length of [.02, .55]) for (const buildup of [0, 4, 8]) for (const angle of [30, 45]) {
+      const canvas = new FakeCanvas()
+      const renderer = new EmbroideryRenderer(canvas as unknown as HTMLCanvasElement, side)
+      renderer.render([], null, null, '#74516f')
+      const item = { ...stitch('geometry', 1), start: { x: .2, y: .4 }, end: { x: .2 + length, y: .45 }, needlePose: { inclinationFromNormalDeg: angle, azimuthDeg: 30 } } as Stitch
+      const path = Reflect.get(renderer, 'settledThreadPath').call(renderer, item, item.start, item.end, buildup) as { x1: number; y1: number; x2: number; y2: number; c1x: number; c1y: number; c2x: number; c2y: number }
+      expect(path.x1).toBeCloseTo((side === 'back' ? 1 - item.start.x : item.start.x) * 640)
+      expect(path.y1).toBeCloseTo(item.start.y * 640)
+      expect(path.x2).toBeCloseTo((side === 'back' ? 1 - item.end.x : item.end.x) * 640)
+      const final: CubicThreadPath = [{ x: path.x1, y: path.y1 }, { x: path.c1x, y: path.c1y }, { x: path.c2x, y: path.c2y }, { x: path.x2, y: path.y2 }]
+      const loose = looseThreadPath([final[0], { x: 300, y: 500 }, { x: 250, y: 100 }, final[3]])
+      expect(tightenThreadPath(loose, final, 0)).toEqual(loose)
+      const tightened = tightenThreadPath(loose, final, 1)
+      for (let i = 0; i < tightened.length; i++) for (let t = 0; t <= 1; t += .05) {
+        const p = sampleThreadPath(tightened[i]!, t), q = sampleThreadPath(final, (i + t) / tightened.length)
+        expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeLessThan(.000001)
+      }
+      renderer.destroy()
+    }
+  })
 
   it('keeps preview and 120 motion frames off the static canvas, then appends once', () => {
     const canvas = new FakeCanvas()

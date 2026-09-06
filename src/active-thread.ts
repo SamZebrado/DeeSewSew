@@ -6,6 +6,7 @@ export interface ActiveThreadState {
   points: NormalizedPoint[]
   previous: NormalizedPoint[]
   reducedMotion: boolean
+  accumulatorMs: number
 }
 
 export interface ActiveThreadOptions {
@@ -42,18 +43,42 @@ export function createActiveThread(anchor: NormalizedPoint, target: NormalizedPo
   const count = safePointCount(options.pointCount)
   const reducedMotion = Boolean(options.reducedMotion)
   const points = initialPoints(anchor, target, count, reducedMotion)
-  return { anchor: clonePoint(anchor), target: clonePoint(target), points, previous: points.map(clonePoint), reducedMotion }
+  return { anchor: clonePoint(anchor), target: clonePoint(target), points, previous: points.map(clonePoint), reducedMotion, accumulatorMs: 0 }
 }
 
 export function retargetActiveThread(state: ActiveThreadState, target: NormalizedPoint): ActiveThreadState {
   if (!finitePoint(target)) return state
-  return { ...state, target: clonePoint(target) }
+  const points = state.points.map(clonePoint)
+  const previous = state.previous.map(clonePoint)
+  points[points.length - 1] = clonePoint(target)
+  previous[previous.length - 1] = clonePoint(target)
+  return { ...state, target: clonePoint(target), points, previous }
 }
 
 export function stepActiveThread(state: ActiveThreadState, elapsedMs: number): ActiveThreadState {
-  const frameScale = clamp(Number.isFinite(elapsedMs) ? elapsedMs / (1000 / 60) : 1, 0, 2)
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return state
+  const timestep = 1000 / 60
+  let accumulator = state.accumulatorMs + Math.min(elapsedMs, timestep * 6)
+  let next = state
+  let substeps = 0
+  while (accumulator + 1e-8 >= timestep && substeps < 6) {
+    next = integrateActiveThread(next)
+    accumulator = Math.max(0, accumulator - timestep)
+    substeps += 1
+  }
+  return { ...next, accumulatorMs: Math.min(accumulator, timestep) }
+}
+
+export function resetActiveThreadClock(state: ActiveThreadState): ActiveThreadState {
+  return { ...state, accumulatorMs: 0 }
+}
+
+function integrateActiveThread(state: ActiveThreadState): ActiveThreadState {
   const damping = state.reducedMotion ? .18 : .76
-  const gravity = state.reducedMotion ? .000035 : .00016
+  // A weak rest-shape spring removes slow constraint creep on short threads.
+  // Sag is encoded in this equilibrium rather than injected indefinitely.
+  const rest = initialPoints(state.anchor, state.target, state.points.length, state.reducedMotion)
+  const stiffness = state.reducedMotion ? .22 : .06
   const points = state.points.map(clonePoint)
   const previous = state.previous.map(clonePoint)
   const lastIndex = points.length - 1
@@ -65,8 +90,8 @@ export function stepActiveThread(state: ActiveThreadState, elapsedMs: number): A
     const prior = state.previous[index]!
     previous[index] = clonePoint(current)
     points[index] = {
-      x: clamp(current.x + (current.x - prior.x) * damping * frameScale, -.25, 1.25),
-      y: clamp(current.y + (current.y - prior.y) * damping * frameScale + gravity * frameScale * frameScale, -.25, 1.25),
+      x: clamp(current.x + (current.x - prior.x) * damping + (rest[index]!.x - current.x) * stiffness, -.25, 1.25),
+      y: clamp(current.y + (current.y - prior.y) * damping + (rest[index]!.y - current.y) * stiffness, -.25, 1.25),
     }
   }
 
@@ -120,6 +145,12 @@ export function activeThreadSag(points: readonly NormalizedPoint[], start: Norma
     maximum = Math.max(maximum, points[index]!.y - line.y)
   }
   return maximum
+}
+
+export function activeThreadDeflection(points: readonly NormalizedPoint[], start: NormalizedPoint, end: NormalizedPoint): number {
+  const dx = end.x - start.x, dy = end.y - start.y
+  const length = Math.max(1e-9, Math.hypot(dx, dy))
+  return Math.max(0, ...points.map(point => Math.abs(dx * (point.y - start.y) - dy * (point.x - start.x)) / length))
 }
 
 export function snapshotActiveThread(state: ActiveThreadState | null): NormalizedPoint[] | null {

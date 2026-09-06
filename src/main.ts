@@ -10,10 +10,11 @@ import {
   migrateLegacyPiece, punctureFabric, redoTopology, topologyRenderItems,
   undoTopology, type SurfaceSide,
 } from './embroidery-topology'
-import { STITCH_MOTION_DURATION_MS, sampleStitchMotion } from './stitch-motion'
+import { STITCH_MOTION_DURATION_MS, sampleStitchMotion, sampleStitchMotionProgress } from './stitch-motion'
 import { createPieceStorage, downloadRecovery } from './piece-storage'
+import { needlePose } from './needle-pose'
 import {
-  activeThreadSag, createActiveThread, retargetActiveThread, snapshotActiveThread, stepActiveThread,
+  activeThreadSag, activeThreadDeflection, createActiveThread, retargetActiveThread, resetActiveThreadClock, snapshotActiveThread, stepActiveThread,
   type ActiveThreadState,
 } from './active-thread'
 
@@ -78,6 +79,8 @@ let activeThreadLoopStarts = 0
 let motion: StitchMotion | null = null
 let motionSide: SurfaceSide | null = null
 let motionFrame: number | null = null
+let tailFrame: number | null = null
+let tails: { side: SurfaceSide; visual: StitchMotion; startedAt: number; from: number }[] = []
 let viewFrame: number | null = null
 let stitchPointerId: number | null = null
 let viewPointerId: number | null = null
@@ -118,8 +121,8 @@ function transientFor(side: SurfaceSide): TransientThreadVisual | undefined {
   if (surface === side && target && view.stitchable) return { emergenceTarget: target, needleVisible: false }
   return undefined
 }
-function renderFront(): void { const [anchor, preview] = pendingFor('front'); renderer.render(frontItems, anchor, preview, color, motionSide === 'front' ? motion : null, transientFor('front')) }
-function renderBack(): void { const [anchor, preview] = pendingFor('back'); backRenderer.render(backItems, anchor, preview, color, motionSide === 'back' ? motion : null, transientFor('back')) }
+function renderFront(): void { const [anchor, preview] = pendingFor('front'); renderer.render(frontItems, anchor, preview, color, motionSide === 'front' ? motion : null, transientFor('front'), tails.filter(tail => tail.side === 'front').map(tail => tail.visual)) }
+function renderBack(): void { const [anchor, preview] = pendingFor('back'); backRenderer.render(backItems, anchor, preview, color, motionSide === 'back' ? motion : null, transientFor('back'), tails.filter(tail => tail.side === 'back').map(tail => tail.visual)) }
 function updateHistoryControls(): void {
   undoButton.disabled = history.present.punctures.length === 0 && history.present.legacyFrontStitches.length === 0
   clearButton.disabled = undoButton.disabled
@@ -132,7 +135,11 @@ function render(): void {
   hoopShell.dataset.targetMode = mode ?? 'blocked'
   hoopShell.dataset.activeThreadPoints = String(pointCount)
   hoopShell.dataset.activeThreadSag = sag.toFixed(5)
+  hoopShell.dataset.activeThreadDeflection = String(activeThread ? activeThreadDeflection(activeThread.points, activeThread.anchor, activeThread.target) : 0)
   hoopShell.dataset.activeThreadLoopStarts = String(activeThreadLoopStarts)
+  hoopShell.dataset.threadEyeX = String(activeThread?.points.at(-1)?.x ?? '')
+  hoopShell.dataset.threadEyeY = String(activeThread?.points.at(-1)?.y ?? '')
+  hoopShell.dataset.tailTransitions = String(tails.length)
   renderFront(); renderBack(); updateHistoryControls()
 }
 function announce(title: string, copy: string): void { statusTitle.textContent = title; statusCopy.textContent = copy }
@@ -162,11 +169,35 @@ function setMotionDataset(state: 'idle' | 'off' | 'running', phase: string = sta
     surfaceCanvas.dataset.motionProgress = state === 'running' && surface !== side ? '0' : progress
   }
 }
-function stopStitchMotion(redraw = false): void {
+function stopStitchMotion(redraw = false, clearTails = true): void {
   if (motionFrame !== null) cancelAnimationFrame(motionFrame)
   motionFrame = null; motion = null; motionSide = null
+  if (clearTails) {
+    if (tailFrame !== null) cancelAnimationFrame(tailFrame)
+    tailFrame = null; tails = []
+  }
   setMotionDataset(motionIsActive() ? 'idle' : 'off')
   if (redraw) render()
+}
+function interruptStitchMotion(): void {
+  if (!motion || !motionSide) return
+  // Up to four 100 ms tails; overload deterministically settles the oldest.
+  tails.push({ side: motionSide, visual: motion, startedAt: performance.now(), from: motion.progress })
+  tails = tails.slice(-4)
+  stopStitchMotion(false, false)
+  if (tailFrame !== null) return
+  const tick = (now: number) => {
+    tailFrame = null
+    for (const tail of tails) {
+      const t = Math.min(1, Math.max(0, (now - tail.startedAt) / 100))
+      const progress = tail.from + (1 - tail.from) * t * t * (3 - 2 * t)
+      tail.visual = { ...tail.visual, progress, sample: sampleStitchMotionProgress(progress) }
+    }
+    tails = tails.filter(tail => now - tail.startedAt < 100)
+    render()
+    if (tails.length) tailFrame = requestAnimationFrame(tick)
+  }
+  tailFrame = requestAnimationFrame(tick)
 }
 function visibleSurface(view: HoopViewSnapshot): SurfaceSide | null { return view.face === 'front' || view.face === 'back' ? view.face : null }
 function needleAvailable(view = viewController.snapshot()): boolean { return view.stitchable && visibleSurface(view) === history.present.needle.side }
@@ -180,6 +211,8 @@ function stopActiveThreadLoop(): void {
   activeThreadFrame = null
   activeThreadTimestamp = null
   activeThreadStillFrames = 0
+  if (activeThread) activeThread = resetActiveThreadClock(activeThread)
+  hoopShell.dataset.threadLoopState = 'idle'
 }
 function runActiveThreadFrame(now: number): void {
   activeThreadFrame = null
@@ -192,12 +225,13 @@ function runActiveThreadFrame(now: number): void {
   activeThreadStillFrames = movement < .000025 ? activeThreadStillFrames + 1 : 0
   render()
   if (activeThreadStillFrames < 14) activeThreadFrame = requestAnimationFrame(runActiveThreadFrame)
-  else activeThreadTimestamp = null
+  else { activeThreadTimestamp = null; hoopShell.dataset.threadLoopState = 'idle' }
 }
 function ensureActiveThreadLoop(): void {
   if (!activeThread || document.hidden || activeThreadFrame !== null) return
   activeThreadStillFrames = 0
   activeThreadLoopStarts += 1
+  hoopShell.dataset.threadLoopState = 'running'
   activeThreadFrame = requestAnimationFrame(runActiveThreadFrame)
 }
 function resetTransientToNeedle(redraw = true): void {
@@ -208,14 +242,15 @@ function resetTransientToNeedle(redraw = true): void {
 }
 function updateTarget(point: NormalizedPoint): void {
   target = { ...point }
+  const eye = needlePose(point).eye
   const anchor = history.present.needle.position
   if (!anchor || Math.hypot(point.x - anchor.x, point.y - anchor.y) < .0005) {
     activeThread = null
     stopActiveThreadLoop()
   } else if (activeThread && activeThread.anchor.x === anchor.x && activeThread.anchor.y === anchor.y) {
-    activeThread = retargetActiveThread(activeThread, point)
+    activeThread = retargetActiveThread(activeThread, eye)
   } else {
-    activeThread = createActiveThread(anchor, point, { reducedMotion: reducedMotionQuery.matches })
+    activeThread = createActiveThread(anchor, eye, { reducedMotion: reducedMotionQuery.matches })
   }
   ensureActiveThreadLoop()
   render()
@@ -233,9 +268,12 @@ function pointerPoint(event: PointerEvent, requireTarget = true): NormalizedPoin
   return inverseProjectFabricPoint(event.clientX, event.clientY - offset, view, projectionGeometry())
 }
 function startStitchMotion(stitch: Stitch, side: SurfaceSide, loosePoints: readonly NormalizedPoint[] | null): void {
-  stopStitchMotion(false); updateHistoryControls()
+  stopStitchMotion(false, false); updateHistoryControls()
   if (!motionIsActive()) { setMotionDataset('off'); render(); return }
   const startedAt = performance.now(); motionSide = side; setMotionDataset('running', 'press', '0', side)
+  const surfaceCanvas = side === 'front' ? canvas : backCanvas
+  surfaceCanvas.dataset.tightenEyeX = String(loosePoints?.at(-1)?.x ?? '')
+  surfaceCanvas.dataset.tightenEyeY = String(loosePoints?.at(-1)?.y ?? '')
   const tick = (now: number) => {
     const sample = sampleStitchMotion(now - startedAt)
     motion = { stitchId: stitch.id, progress: sample.progress, sample, loosePoints: loosePoints ?? undefined }
@@ -243,7 +281,8 @@ function startStitchMotion(stitch: Stitch, side: SurfaceSide, loosePoints: reado
     if (sample.elapsedMs < STITCH_MOTION_DURATION_MS) motionFrame = requestAnimationFrame(tick)
     else { motionFrame = null; motion = null; motionSide = null; setMotionDataset('idle', 'idle', '1'); render() }
   }
-  motionFrame = requestAnimationFrame(tick)
+  // Install the transition before returning from pointerup, not one RAF later.
+  tick(startedAt)
 }
 
 function syncMotionControl(): void {
@@ -316,7 +355,7 @@ function cancelNeedleInteraction(redraw = true): void {
 hoopShell.addEventListener('pointerdown', (event) => {
   if (!event.isPrimary || event.button !== 0 || stitchPointerId !== null || viewController.snapshot().gestureActive) return
   viewController.tick(performance.now()); const point = pointerPoint(event)
-  if (point) { stopStitchMotion(false); stitchPointerId = event.pointerId; hoopShell.setPointerCapture(event.pointerId); updateTarget(point); return }
+  if (point) { interruptStitchMotion(); stitchPointerId = event.pointerId; hoopShell.setPointerCapture(event.pointerId); updateTarget(point); return }
   stopViewLoop()
   if (!viewController.beginGesture(event.pointerId, event.clientX, event.clientY)) return
   viewPointerId = event.pointerId
@@ -341,6 +380,7 @@ hoopShell.addEventListener('pointerup', (event) => {
   const previousPosition = history.present.needle.position
   if (previousPosition && Math.hypot(point.x - previousPosition.x, point.y - previousPosition.y) < .018) { announce('A little farther', 'Move the needle tip before puncturing again.'); return }
   if (!canPuncture(history.present)) { resetTransientToNeedle(false); announce('Fabric full', 'This piece has reached its local segment limit. Undo or clear before adding more.'); render(); return }
+  updateTarget(point)
   const loosePoints = snapshotActiveThread(activeThread)
   stopActiveThreadLoop()
   const result = punctureFabric(history.present, point, { type: stitchType, color }); const motionSurface = result.puncture.fromSide
@@ -377,8 +417,8 @@ rotateButton.addEventListener('click', () => {
   if (viewController.snapshot().mode === 'auto') { viewController.stopAuto(); stopViewLoop(); syncViewControl(); announceViewPosition('Rotation paused'); render(); return }
   if (viewController.startAuto(performance.now())) { syncViewControl(); ensureViewLoop(); render(); announce('3D view rotating', 'Puncture is paused while the hoop turns. Stop anywhere to evaluate the angle.') }
 })
-frontButton.addEventListener('click', () => { if (stitchPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapFront(); syncViewControl(); announceViewPosition(); render() })
-backButton.addEventListener('click', () => { if (stitchPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapBack(); syncViewControl(); announceViewPosition(); render() })
+frontButton.addEventListener('click', () => { if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapFront(); syncViewControl(); announceViewPosition(); render() })
+backButton.addEventListener('click', () => { if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapBack(); syncViewControl(); announceViewPosition(); render() })
 motionButton.addEventListener('click', () => {
   settings = { ...settings, motionEnabled: !settings.motionEnabled }; saveSettings(settings); stopStitchMotion(false); syncMotionControl(); render()
   announce(settings.motionEnabled ? 'Stitch motion on' : 'Stitch motion off', settings.motionEnabled ? 'Punctures tighten from the loose thread you are moving.' : 'Live thread following remains; punctures settle immediately.')
@@ -386,13 +426,13 @@ motionButton.addEventListener('click', () => {
 undoButton.addEventListener('click', () => { cancelNeedleInteraction(false); history = undoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture undone', `Needle restored to the ${history.present.needle.side}.`) })
 redoButton.addEventListener('click', () => { cancelNeedleInteraction(false); history = redoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture restored', `Needle is on the ${history.present.needle.side}.`) })
 clearButton.addEventListener('click', () => {
-  cancelNeedleInteraction(false)
+  cancelNeedleInteraction()
   if (clearButton.disabled || !window.confirm('Clear every puncture and thread segment from this fabric?')) return
   stopStitchMotion(false); history = clearTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Fabric cleared', 'Needle reset to the front surface.')
 })
 hoopShell.addEventListener('keydown', (event) => {
   if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
-  event.preventDefault(); if (stitchPointerId !== null) cancelNeedleInteraction(false); stopViewLoop()
+  event.preventDefault(); if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(false); stopViewLoop()
   if (viewController.handleKey(event.key)) { syncViewControl(); announceViewPosition('View adjusted'); render() }
 })
 window.addEventListener('keydown', (event) => {
@@ -408,7 +448,7 @@ window.addEventListener('blur', () => { if (stitchPointerId !== null || viewPoin
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction()
-    else stopActiveThreadLoop()
+    else { stopActiveThreadLoop(); stopStitchMotion(false) }
   } else ensureActiveThreadLoop()
 })
 renderer.onResize = renderFront; backRenderer.onResize = renderBack

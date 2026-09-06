@@ -209,6 +209,7 @@ test('1,000 settled segments plus one active soft thread remain interactively bo
   const previewMs = Date.now() - previewStartedAt
   const activePointCount = Number(await hoop.getAttribute('data-active-thread-points'))
   const activeSag = Number(await hoop.getAttribute('data-active-thread-sag'))
+  const activeDeflection = Number(await hoop.getAttribute('data-active-thread-deflection'))
   const activeLoopStarts = Number(await hoop.getAttribute('data-active-thread-loop-starts'))
   const commitStartedAt = Date.now()
   await page.mouse.click(box.x + box.width * .62, box.y + box.height * .54)
@@ -228,7 +229,10 @@ test('1,000 settled segments plus one active soft thread remain interactively bo
   expect(rotateStopMs).toBeLessThan(2_000)
   expect(previewMs).toBeLessThan(1_500)
   expect(activePointCount).toBe(10)
-  expect(activeSag).toBeGreaterThan(0)
+  // Inertia may arch above the chord after a direction change. Signed downward
+  // sag can be zero while the visible rope is still curved; test its geometry.
+  expect(activeSag).toBeGreaterThanOrEqual(0)
+  expect(activeDeflection).toBeGreaterThan(.00001)
   expect(activeLoopStarts).toBeLessThan(8)
   expect(commitMs).toBeLessThan(1_500)
   expect(undoMs).toBeLessThan(1_500)
