@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { SettledPrefixCache } from './renderer-cache'
+import { MAX_RETIRED_CACHE_KEYS, SettledPrefixCache } from './renderer-cache'
 
 interface Item { id: string; value: number }
 const keyOf = (item: Item): string => `${item.id}:${item.value}`
 
 describe('SettledPrefixCache', () => {
+  it('bounds historical keys under long replacement sessions without weakening redraw safety', () => {
+    const cache = new SettledPrefixCache<Item>(keyOf)
+    let input: Item[] = []
+    for (let i = 0; i < 10000; i++) {
+      input = [{ id: String(i), value: i }]; cache.accept(input, cache.plan(input))
+    }
+    expect((cache as unknown as { retiredKeys: Set<string> }).retiredKeys.size).toBeLessThanOrEqual(MAX_RETIRED_CACHE_KEYS)
+    expect(cache.plan(input).action).toBe('reuse')
+    expect(cache.plan([...input, { id: 'next', value: 1 }]).action).toBe('rebuild')
+  })
   it('builds once, then reuses the same static prefix for dynamic frames', () => {
     const cache = new SettledPrefixCache<Item>(keyOf)
     const input = [{ id: 'a', value: 1 }]

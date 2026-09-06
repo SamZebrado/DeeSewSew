@@ -1,19 +1,23 @@
 import './style.css'
+import { localize, locale, setText, switchLocale, t } from './i18n'
+import { LEAF, guideStep, loadGuide, nearGuideTarget, saveGuide, type GuideSession } from './leaf-guide'
 import { TouchRotation } from './touch-rotation'
 import { EmbroideryRenderer, type StitchMotion, type TransientThreadVisual } from './renderer'
 import { FABRIC_RADIUS, type NormalizedPoint, type Stitch, type StitchType } from './stitch-model'
 import { makeVisualScene } from './visual-scenes'
 import { MAX_CUSTOM_COLORS, addCustomColor, loadSettings, normalizeHexColor, saveSettings as writeSettings, type StudioSettings } from './settings'
 import { HoopViewController, touchTargetOffset, type HoopViewSnapshot } from './hoop-view-controller'
-import { inverseProjectFabricPoint } from './fabric-projection'
+import { inverseProjectFabricPoint, projectFabricPoint } from './fabric-projection'
+import { FloatingNeedle } from './floating-needle'
 import {
   canPuncture, clearTopology, commitPuncture, createTopologyHistory,
   migrateLegacyPiece, punctureFabric, redoTopology, topologyRenderItems,
   undoTopology, type SurfaceSide,
+  parseArtworkFile, serializeEmbroideryPiece,
 } from './embroidery-topology'
 import { STITCH_MOTION_DURATION_MS, sampleStitchMotion, sampleStitchMotionProgress } from './stitch-motion'
 import { createPieceStorage, downloadRecovery } from './piece-storage'
-import { needlePose } from './needle-pose'
+import { needlePassage, needlePose, DEFAULT_NEEDLE_ORIENTATION, type NeedlePose } from './needle-pose'
 import {
   activeThreadSag, activeThreadDeflection, createActiveThread, retargetActiveThread, resetActiveThreadClock, snapshotActiveThread, stepActiveThread,
   type ActiveThreadState,
@@ -44,7 +48,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
         <div class="needle-state" id="needle-state" aria-live="polite"><span class="needle-state-icon" aria-hidden="true">⌁</span><strong id="needle-side">Needle: front</strong><small id="edit-state">Front surface editable</small></div>
         <p class="canvas-help" id="canvas-help">Move the needle; the loose thread follows. Click to puncture, then choose where it emerges.</p>
-        <p class="rotation-hint">按住 Shift 拖动可旋转 · 双指拖动旋转<br>Hold Shift and drag to rotate · Drag with two fingers to rotate</p>
+        <p class="rotation-hint">Hold Shift and drag to rotate · Drag with two fingers to rotate</p>
       </div>
       <aside class="tools" aria-label="Stitch controls">
         <section class="tool-group"><div class="tool-heading"><h2>Thread</h2><span id="color-name">${colorName(settings.selectedColor)}</span></div><div class="palette" id="palette" role="radiogroup" aria-label="Thread color">${colors.map(([name, value]) => swatchMarkup(name, value, settings.selectedColor === value)).join('')}${settings.customColors.map((value) => swatchMarkup(colorName(value), value, settings.selectedColor === value)).join('')}</div><div class="custom-color-row"><label class="color-picker" for="custom-color"><input id="custom-color" type="color" value="${settings.selectedColor}" aria-label="Choose a custom thread color"><span>Custom</span></label><button class="add-color-button" id="add-color" type="button">Add color</button></div></section>
@@ -54,11 +58,19 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button class="mode-control" id="motion-toggle" type="button" aria-pressed="${settings.motionEnabled && !reducedMotionQuery.matches}"><span class="mode-icon needle-icon" aria-hidden="true">⌁</span><span class="mode-copy"><strong>Stitch motion</strong><small>Press, puncture, tighten, and settle</small></span><span class="switch-track" aria-hidden="true"><span></span></span></button>
         </div><div class="view-actions"><button class="soft-button" id="view-front" type="button">Return front</button><button class="soft-button" id="view-back" type="button">Snap back</button></div></section>
         <section class="tool-group history-group"><h2>Edit</h2><div class="edit-row"><button class="soft-button" id="undo" type="button" disabled aria-label="Undo last puncture">↶ <span>Undo</span></button><button class="soft-button" id="redo" type="button" disabled aria-label="Redo last puncture">↷ <span>Redo</span></button></div><button class="clear-button" id="clear" type="button" disabled>Clear fabric</button></section>
+        <section class="tool-group"><h2>Artwork</h2><div class="edit-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><button class="soft-button" id="leaf-guide" type="button">Try a leaf</button><p id="guide-copy" hidden></p></section>
         <div class="quiet-tip" role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true">✦</span><p><strong id="status-title">Needle ready</strong><br><span id="status-copy">Move the front-side needle, then click to puncture.</span></p></div>
       </aside>
     </section>
   </main>`
 
+localize(document.querySelector('#app')!)
+document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en'
+const languageButton = document.createElement('button')
+languageButton.id = 'language-toggle'; languageButton.type = 'button'
+languageButton.textContent = locale === 'zh' ? 'English' : '中文'
+document.querySelector('.masthead > div:last-child')!.prepend(languageButton)
+languageButton.addEventListener('click', () => { switchLocale(); languageButton.textContent = locale === 'zh' ? 'English' : '中文' })
 const canvas = document.querySelector<HTMLCanvasElement>('#embroidery')!
 const backCanvas = document.querySelector<HTMLCanvasElement>('#embroidery-back')!
 const renderer = new EmbroideryRenderer(canvas, 'front')
@@ -68,11 +80,14 @@ let piece = pieceStorage.initial.piece
 const scene = import.meta.env.DEV ? makeVisualScene(new URLSearchParams(location.search).get('scene') ?? '') : null
 if (scene) piece = migrateLegacyPiece({ schemaVersion: 1, nextOrder: scene.length + 1, stitches: scene })
 let history = createTopologyHistory(piece)
+let guide: GuideSession | null = loadGuide(piece)
+let guideIndex = guide ? guideStep(piece, guide) ?? 0 : 0
 let frontItems: Stitch[] = []
 let backItems: Stitch[] = []
 let color: string = settings.selectedColor
 let stitchType: StitchType = 'running'
 let target: NormalizedPoint | null = history.present.needle.position ? { ...history.present.needle.position } : null
+let hoverPose: NeedlePose | null = target ? needlePose(target) : null
 let activeThread: ActiveThreadState | null = null
 let activeThreadFrame: number | null = null
 let activeThreadTimestamp: number | null = null
@@ -93,6 +108,8 @@ const viewController = new HoopViewController(reducedMotionQuery.matches)
 const motionIsActive = (): boolean => settings.motionEnabled && !reducedMotionQuery.matches
 
 const hoopShell = document.querySelector<HTMLElement>('#hoop-shell')!
+const floatingNeedle = new FloatingNeedle()
+let floating = false
 const hoopRotator = document.querySelector<HTMLElement>('#hoop-rotator')!
 const palette = document.querySelector<HTMLElement>('#palette')!
 const customColorInput = document.querySelector<HTMLInputElement>('#custom-color')!
@@ -109,31 +126,83 @@ const statusCopy = document.querySelector<HTMLElement>('#status-copy')!
 const needleSideLabel = document.querySelector<HTMLElement>('#needle-side')!
 const editStateLabel = document.querySelector<HTMLElement>('#edit-state')!
 const canvasHelp = document.querySelector<HTMLElement>('#canvas-help')!
+const guideButton = document.querySelector<HTMLButtonElement>('#leaf-guide')!
+const guideCopy = document.querySelector<HTMLElement>('#guide-copy')!
+const guideMarker = document.createElement('span')
+guideMarker.id = 'guide-target'; guideMarker.setAttribute('aria-hidden', 'true'); guideMarker.hidden = true; hoopShell.append(guideMarker)
+function refreshGuide(): void {
+  const step = guide ? guideStep(history.present, guide) : null
+  if (guide && step === null) { guide = null; saveGuide(null) }
+  guideIndex = step ?? 0
+  const guided = Boolean(guide && guideIndex < LEAF.targets.length)
+  palette.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = guided })
+  customColorInput.disabled = guided; addColorButton.disabled = guided
+  setText(guideButton, guide ? 'Exit guide' : 'Try a leaf')
+  guideCopy.hidden = !guide
+  if (guide) setText(guideCopy, guideIndex === LEAF.targets.length ? 'Guide finished. Your leaf is ordinary editable artwork.' : `Leaf step ${guideIndex + 1} of ${LEAF.targets.length}`)
+}
+guideButton.addEventListener('click', () => {
+  if (guide) { guide = null; announce('Guide paused', 'Your stitches remain on the fabric.') }
+  else { guide = { version: 1, startOrder: history.present.nextOrder, side: history.present.needle.side, color }; announce('Try a leaf', 'Follow the next highlighted point. Existing stitches stay when you exit.') }
+  saveGuide(guide); refreshGuide(); render()
+})
 
 function refreshRenderItems(): void {
+  refreshGuide()
   frontItems = topologyRenderItems(history.present, 'front')
   backItems = topologyRenderItems(history.present, 'back')
 }
 function pendingFor(side: SurfaceSide): [NormalizedPoint | null, NormalizedPoint | null] {
+  if (floating || motion?.capturedPose) return [null, null]
   return history.present.needle.side === side ? [history.present.needle.position, target] : [null, null]
 }
 function transientFor(side: SurfaceSide): TransientThreadVisual | undefined {
+  if (floating) return { needleVisible: false }
   const view = viewController.snapshot()
   const surface = visibleSurface(view)
+  if (motion?.capturedPose) return { passage: { sample: needlePassage(motion.capturedPose, motion.progress), destination: side !== motionSide }, needleVisible: false }
   if (history.present.needle.side === side) {
-    return { points: activeThread?.points, needleVisible: true }
+    return { points: activeThread?.points, needleVisible: true, pose: hoverPose ?? undefined }
   }
   if (surface === side && target && view.stitchable) return { emergenceTarget: target, needleVisible: false }
   return undefined
 }
-function renderFront(): void { const [anchor, preview] = pendingFor('front'); renderer.render(frontItems, anchor, preview, color, motionSide === 'front' ? motion : null, transientFor('front'), tails.filter(tail => tail.side === 'front').map(tail => tail.visual)) }
-function renderBack(): void { const [anchor, preview] = pendingFor('back'); backRenderer.render(backItems, anchor, preview, color, motionSide === 'back' ? motion : null, transientFor('back'), tails.filter(tail => tail.side === 'back').map(tail => tail.visual)) }
+const lastFaceInputs: Record<SurfaceSide, readonly unknown[] | null> = { front: null, back: null }
+function renderFace(side: SurfaceSide): void {
+  const items = side === 'front' ? frontItems : backItems
+  const [anchor, preview] = pendingFor(side), transient = transientFor(side)
+  const faceMotion = motionSide === side ? motion : null
+  const faceTails = tails.filter(tail => tail.side === side).map(tail => tail.visual)
+  const inputs = [items, anchor, preview, color, faceMotion, transient?.points, transient?.pose,
+    transient?.needleVisible, transient?.emergenceTarget, transient?.passage ? motion : null, ...faceTails]
+  const previous = lastFaceInputs[side]
+  if (previous?.length === inputs.length && inputs.every((value, i) => value === previous[i])) return
+  ;(side === 'front' ? renderer : backRenderer).render(items, anchor, preview, color, faceMotion, transient, faceTails)
+  lastFaceInputs[side] = inputs
+}
+function renderFront(): void { renderFace('front') }
+function renderBack(): void { renderFace('back') }
 function updateHistoryControls(): void {
   undoButton.disabled = history.present.punctures.length === 0 && history.present.legacyFrontStitches.length === 0
   clearButton.disabled = undoButton.disabled
   redoButton.disabled = history.future.length === 0
 }
 function render(): void {
+  const nextGuide = guide ? LEAF.targets[guideIndex] : undefined
+  guideMarker.hidden = !nextGuide || !targetMode()
+  if (nextGuide && !guideMarker.hidden) {
+    const geometry = projectionGeometry(), p = projectFabricPoint(nextGuide, viewController.snapshot(), geometry)
+    if (p) { guideMarker.style.left = `${p.clientX - geometry.centerX + geometry.size / 2}px`; guideMarker.style.top = `${p.clientY - geometry.centerY + geometry.size / 2}px` }
+    else guideMarker.hidden = true
+  }
+  if (!needleAvailable() || motion) floating = false
+  if (floating && hoverPose) {
+    const geometry = projectionGeometry(), view = viewController.snapshot()
+    floatingNeedle.draw(hoverPose, activeThread?.points ?? [], color, point => {
+      const projected = projectFabricPoint(point, view, geometry)
+      return projected ? { x: projected.clientX, y: projected.clientY } : { x: -1000, y: -1000 }
+    }, geometry.size)
+  } else floatingNeedle.hide()
   const mode = targetMode()
   const pointCount = activeThread?.points.length ?? 0
   const sag = activeThread ? activeThreadSag(activeThread.points, activeThread.anchor, activeThread.target) : 0
@@ -145,11 +214,19 @@ function render(): void {
   hoopShell.dataset.threadEyeX = String(activeThread?.points.at(-1)?.x ?? '')
   hoopShell.dataset.threadEyeY = String(activeThread?.points.at(-1)?.y ?? '')
   hoopShell.dataset.tailTransitions = String(tails.length)
+  if (motion?.capturedPose) {
+    const passage = needlePassage(motion.capturedPose, motion.progress)
+    hoopShell.dataset.passageEye = JSON.stringify(passage.pose.eye)
+    hoopShell.dataset.sourceThreadEnd = JSON.stringify(passage.sourceThreadEnd)
+    hoopShell.dataset.destinationEyeVisible = String(passage.destinationEyeVisible)
+    hoopShell.dataset.pulledHole = JSON.stringify(motion.capturedPose.tip)
+    hoopShell.dataset.tensionProgress = String(passage.pull)
+  }
   renderFront(); renderBack(); updateHistoryControls()
 }
-function announce(title: string, copy: string): void { statusTitle.textContent = title; statusCopy.textContent = copy }
+function announce(title: string, copy: string): void { setText(statusTitle, title); setText(statusCopy, copy) }
 function showSaveState(saved: boolean): void {
-  document.querySelector('#save-state')!.textContent = saved ? 'Saved on this device' : 'Work not saved — download a recovery copy before leaving'
+  setText(document.querySelector('#save-state')!, saved ? 'Saved on this device' : 'Work not saved — download a recovery copy before leaving')
   document.querySelector<HTMLButtonElement>('#recovery-copy')!.hidden = saved
 }
 function saveSettings(value: StudioSettings): void {
@@ -161,7 +238,7 @@ function saveSettings(value: StudioSettings): void {
     warning.setAttribute('role', 'status')
     document.querySelector('.masthead')!.append(warning)
   }
-  warning.textContent = saved ? '' : 'Palette and motion settings are temporary; device storage failed.'
+  setText(warning, saved ? '' : 'Palette and motion settings are temporary; device storage failed.')
 }
 function persist(): void {
   piece = history.present
@@ -242,12 +319,14 @@ function ensureActiveThreadLoop(): void {
 function resetTransientToNeedle(redraw = true): void {
   stopActiveThreadLoop()
   target = history.present.needle.position ? { ...history.present.needle.position } : null
+  hoverPose = target ? needlePose(target, history.present.needle.side === 'back' ? -Math.PI / 4 : DEFAULT_NEEDLE_ORIENTATION) : null
   activeThread = null
   if (redraw) render()
 }
 function updateTarget(point: NormalizedPoint): void {
   target = { ...point }
-  const eye = needlePose(point).eye
+  hoverPose = needlePose(point, history.present.needle.side === 'back' ? -Math.PI / 4 : DEFAULT_NEEDLE_ORIENTATION)
+  const eye = hoverPose.eye
   const anchor = history.present.needle.position
   if (!anchor || Math.hypot(point.x - anchor.x, point.y - anchor.y) < .0005) {
     activeThread = null
@@ -274,17 +353,24 @@ function pointerPoint(event: PointerEvent, requireTarget = true): NormalizedPoin
 }
 function startStitchMotion(stitch: Stitch, side: SurfaceSide, loosePoints: readonly NormalizedPoint[] | null): void {
   stopStitchMotion(false, false); updateHistoryControls()
-  if (!motionIsActive()) { setMotionDataset('off'); render(); return }
+  if (!motionIsActive()) { resetTransientToNeedle(false); setMotionDataset('off'); render(); return }
   const startedAt = performance.now(); motionSide = side; setMotionDataset('running', 'press', '0', side)
+  const capturedPose = hoverPose ?? needlePose(stitch.needleEnd ?? stitch.end)
   const surfaceCanvas = side === 'front' ? canvas : backCanvas
   surfaceCanvas.dataset.tightenEyeX = String(loosePoints?.at(-1)?.x ?? '')
   surfaceCanvas.dataset.tightenEyeY = String(loosePoints?.at(-1)?.y ?? '')
   const tick = (now: number) => {
     const sample = sampleStitchMotion(now - startedAt)
-    motion = { stitchId: stitch.id, progress: sample.progress, sample, loosePoints: loosePoints ?? undefined }
+    motion = { stitchId: stitch.id, progress: sample.progress, sample, loosePoints: loosePoints ?? undefined, capturedPose }
     setMotionDataset('running', sample.phase, sample.progress.toFixed(3), side); render()
     if (sample.elapsedMs < STITCH_MOTION_DURATION_MS) motionFrame = requestAnimationFrame(tick)
-    else { motionFrame = null; motion = null; motionSide = null; setMotionDataset('idle', 'idle', '1'); render() }
+    else {
+      const finished = needlePassage(capturedPose, 1)
+      motionFrame = null; motion = null; motionSide = null
+      hoverPose = finished.pose; target = { ...finished.pose.tip }
+      activeThread = createActiveThread(history.present.needle.position!, finished.pose.eye)
+      setMotionDataset('idle', 'idle', '1'); render(); ensureActiveThreadLoop()
+    }
   }
   // Install the transition before returning from pointerup, not one RAF later.
   tick(startedAt)
@@ -293,7 +379,7 @@ function startStitchMotion(stitch: Stitch, side: SurfaceSide, loosePoints: reado
 function syncMotionControl(): void {
   const active = motionIsActive(); motionButton.disabled = reducedMotionQuery.matches
   motionButton.setAttribute('aria-pressed', String(active)); motionButton.classList.toggle('active', active)
-  motionButton.querySelector('small')!.textContent = reducedMotionQuery.matches ? 'Tightening shortened for Reduce Motion' : 'Press, puncture, tighten, and settle'
+  setText(motionButton.querySelector('small')!, reducedMotionQuery.matches ? 'Tightening shortened for Reduce Motion' : 'Press, puncture, tighten, and settle')
   setMotionDataset(active ? 'idle' : 'off')
 }
 function stopViewLoop(): void { if (viewFrame !== null) cancelAnimationFrame(viewFrame); viewFrame = null }
@@ -312,12 +398,12 @@ function syncViewControl(): void {
   hoopShell.classList.toggle('is-rotating', view.mode === 'auto'); hoopShell.classList.toggle('is-dragging', view.gestureActive); hoopShell.classList.toggle('is-inspect-only', view.interactionState === 'inspect-only'); hoopShell.classList.toggle('is-limited', view.interactionState === 'limited'); hoopShell.classList.toggle('needle-opposite', Boolean(surface && surface !== history.present.needle.side))
   hoopShell.classList.toggle('hidden-targeting', targeting === 'hidden')
   canvas.setAttribute('aria-disabled', String(!(targeting && surface === 'front'))); backCanvas.setAttribute('aria-disabled', String(!(targeting && surface === 'back')))
-  needleSideLabel.textContent = `Needle: ${history.present.needle.side}`
-  editStateLabel.textContent = view.mode === 'auto' ? 'Rotating — puncture paused' : view.interactionState === 'inspect-only' ? 'Inspect only — projection too shallow' : targeting === 'direct' ? `${surface === 'back' ? 'Reverse' : 'Front'} needle active` : targeting === 'hidden' ? `Choose ${history.present.needle.side}-side emergence` : 'Near edge — inspect only'
-  canvasHelp.textContent = view.mode === 'auto' ? 'Stop rotation to evaluate this angle for stitching.' : view.interactionState === 'inspect-only' ? 'This angle is too shallow for reliable puncture placement. Rotate a little farther.' : targeting === 'direct' ? 'Move the needle; the loose thread follows. Click to puncture.' : targeting === 'hidden' ? `Choose where the hidden ${history.present.needle.side}-side needle will emerge. Flipping is optional.` : 'Rotate toward either face to continue.'
+  setText(needleSideLabel, `Needle: ${history.present.needle.side}`)
+  setText(editStateLabel, view.mode === 'auto' ? 'Rotating — puncture paused' : view.interactionState === 'inspect-only' ? 'Inspect only — projection too shallow' : targeting === 'direct' ? `${surface === 'back' ? 'Reverse' : 'Front'} needle active` : targeting === 'hidden' ? `Choose ${history.present.needle.side}-side emergence` : 'Near edge — inspect only')
+  setText(canvasHelp, view.mode === 'auto' ? 'Stop rotation to evaluate this angle for stitching.' : view.interactionState === 'inspect-only' ? 'This angle is too shallow for reliable puncture placement. Rotate a little farther.' : targeting === 'direct' ? 'Move the needle; the loose thread follows. Click to puncture.' : targeting === 'hidden' ? `Choose where the hidden ${history.present.needle.side}-side needle will emerge. Flipping is optional.` : 'Rotate toward either face to continue.')
   rotateButton.disabled = reducedMotionQuery.matches; rotateButton.setAttribute('aria-pressed', String(view.mode === 'auto')); rotateButton.classList.toggle('active', view.mode === 'auto')
-  document.querySelector('#rotation-title')!.textContent = view.mode === 'auto' ? 'Stop rotation' : 'Auto rotate'
-  document.querySelector('#rotation-copy')!.textContent = reducedMotionQuery.matches ? 'Unavailable while Reduce Motion is on' : view.mode === 'auto' ? 'Freeze at the current angle' : 'Slowly turn from the current angle'
+  setText(document.querySelector('#rotation-title')!, view.mode === 'auto' ? 'Stop rotation' : 'Auto rotate')
+  setText(document.querySelector('#rotation-copy')!, reducedMotionQuery.matches ? 'Unavailable while Reduce Motion is on' : view.mode === 'auto' ? 'Freeze at the current angle' : 'Slowly turn from the current angle')
   frontButton.disabled = view.mode === 'manual' && view.frontAligned && !view.gestureActive; backButton.disabled = view.mode === 'manual' && view.backAligned && !view.gestureActive
 }
 function runViewFrame(now: number): void { viewFrame = null; viewController.tick(now); syncViewControl(); if (viewController.snapshot().mode === 'auto') viewFrame = requestAnimationFrame(runViewFrame) }
@@ -334,14 +420,15 @@ function selectColor(nextColor: string): void {
   const selected = palette.querySelector<HTMLButtonElement>(`.swatch[data-color="${normalized}"]`); if (!selected) return
   palette.querySelectorAll<HTMLElement>('.swatch').forEach((item) => { item.classList.remove('selected'); item.setAttribute('aria-checked', 'false') })
   selected.classList.add('selected'); selected.setAttribute('aria-checked', 'true'); color = normalized; settings = { ...settings, selectedColor: normalized }; saveSettings(settings)
-  customColorInput.value = normalized; document.querySelector('#color-name')!.textContent = colorName(normalized); render()
+  customColorInput.value = normalized; setText(document.querySelector('#color-name')!, colorName(normalized)); render()
 }
 function appendCustomSwatch(value: string): void {
   const button = document.createElement('button'); button.className = 'swatch'; button.type = 'button'; button.setAttribute('role', 'radio'); button.setAttribute('aria-checked', 'false')
-  button.setAttribute('aria-label', colorName(value)); button.dataset.color = value; button.dataset.name = colorName(value); button.style.setProperty('--swatch', value); button.innerHTML = '<span></span>'; palette.append(button)
+  button.setAttribute('aria-label', colorName(value)); button.dataset.color = value; button.dataset.name = colorName(value); button.style.setProperty('--swatch', value); button.innerHTML = '<span></span>'; localize(button); palette.append(button)
 }
 function releaseHoopPointer(pointerId: number): void { if (hoopShell.hasPointerCapture(pointerId)) hoopShell.releasePointerCapture(pointerId) }
 function cancelNeedleInteraction(redraw = true, keepTouchGesture = false): void {
+  floating = false; floatingNeedle.hide()
   if (!keepTouchGesture) touchRotation.cancel()
   shiftRotation = false
   const pointerId = stitchPointerId
@@ -408,7 +495,18 @@ hoopShell.addEventListener('pointermove', (event) => {
   }
   if (stitchPointerId !== null && stitchPointerId !== event.pointerId) return
   const next = pointerPoint(event)
-  if (next) updateTarget(next)
+  if (next) { floating = false; if (motion) interruptStitchMotion(); updateTarget(next) }
+})
+window.addEventListener('pointermove', event => {
+  if (event.pointerType !== 'mouse' || !event.isPrimary || event.shiftKey || !needleAvailable()
+    || viewController.snapshot().gestureActive || stitchPointerId !== null) {
+    if (floating) { floating = false; render() }
+    return
+  }
+  const view = viewController.snapshot(), geometry = projectionGeometry()
+  if (inverseProjectFabricPoint(event.clientX, event.clientY, view, geometry)) return
+  const point = inverseProjectFabricPoint(event.clientX, event.clientY, view, geometry, true)
+  if (point) { if (motion) interruptStitchMotion(); floating = true; updateTarget(point) }
 })
 hoopShell.addEventListener('pointerup', (event) => {
   if (event.pointerType === 'touch' && touchRotation.up(event.pointerId)) {
@@ -422,13 +520,15 @@ hoopShell.addEventListener('pointerup', (event) => {
   if (stitchPointerId !== event.pointerId) return
   stitchPointerId = null; releaseHoopPointer(event.pointerId); const point = pointerPoint(event)
   if (!point) { resetTransientToNeedle(); return }
+  const guideTarget = guide ? LEAF.targets[guideIndex] : undefined
+  if (guideTarget && !nearGuideTarget(point, guideTarget)) { announce('Next leaf point', 'Follow the highlighted guide point before continuing.'); return }
   const previousPosition = history.present.needle.position
   if (previousPosition && Math.hypot(point.x - previousPosition.x, point.y - previousPosition.y) < .018) { announce('A little farther', 'Move the needle tip before puncturing again.'); return }
   if (!canPuncture(history.present)) { resetTransientToNeedle(false); announce('Fabric full', 'This piece has reached its local segment limit. Undo or clear before adding more.'); render(); return }
   updateTarget(point)
   const loosePoints = snapshotActiveThread(activeThread)
   stopActiveThreadLoop()
-  const result = punctureFabric(history.present, point, { type: stitchType, color }); const motionSurface = result.puncture.fromSide
+  const result = punctureFabric(history.present, point, { type: stitchType, color: guide && guideTarget ? guide.color : color }); const motionSurface = result.puncture.fromSide
   history = commitPuncture(history, result); target = { ...point }; activeThread = null; refreshRenderItems(); persist(); syncViewControl()
   const motionId = result.segment?.id ?? `${result.puncture.id}-${motionSurface}-hole`
   const motionItem = (motionSurface === 'front' ? frontItems : backItems).find((item) => item.id === motionId)
@@ -462,7 +562,7 @@ addColorButton.addEventListener('click', () => {
 })
 document.querySelectorAll<HTMLButtonElement>('[data-stitch]').forEach((button) => button.addEventListener('click', () => {
   document.querySelectorAll('[data-stitch]').forEach((item) => { item.classList.remove('selected'); item.setAttribute('aria-checked', 'false') })
-  button.classList.add('selected'); button.setAttribute('aria-checked', 'true'); stitchType = button.dataset.stitch as StitchType; announce('Routing changed', `${button.textContent?.trim()} routing will shape the next surface segment.`)
+  button.classList.add('selected'); button.setAttribute('aria-checked', 'true'); stitchType = button.dataset.stitch as StitchType; announce('Routing changed', `${stitchType === 'back' ? 'Back' : 'Running'} routing will shape the next surface segment.`)
 }))
 rotateButton.addEventListener('click', () => {
   cancelNeedleInteraction(false)
@@ -472,14 +572,15 @@ rotateButton.addEventListener('click', () => {
 frontButton.addEventListener('click', () => { if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapFront(); syncViewControl(); announceViewPosition(); render() })
 backButton.addEventListener('click', () => { if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapBack(); syncViewControl(); announceViewPosition(); render() })
 motionButton.addEventListener('click', () => {
-  settings = { ...settings, motionEnabled: !settings.motionEnabled }; saveSettings(settings); stopStitchMotion(false); syncMotionControl(); render()
+  settings = { ...settings, motionEnabled: !settings.motionEnabled }; saveSettings(settings); stopStitchMotion(false); resetTransientToNeedle(false); syncMotionControl(); render()
   announce(settings.motionEnabled ? 'Stitch motion on' : 'Stitch motion off', settings.motionEnabled ? 'Punctures tighten from the loose thread you are moving.' : 'Live thread following remains; punctures settle immediately.')
 })
 undoButton.addEventListener('click', () => { cancelNeedleInteraction(false); history = undoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture undone', `Needle restored to the ${history.present.needle.side}.`) })
 redoButton.addEventListener('click', () => { cancelNeedleInteraction(false); history = redoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture restored', `Needle is on the ${history.present.needle.side}.`) })
 clearButton.addEventListener('click', () => {
   cancelNeedleInteraction()
-  if (clearButton.disabled || !window.confirm('Clear every puncture and thread segment from this fabric?')) return
+  if (clearButton.disabled || !window.confirm(t('Clear every puncture and thread segment from this fabric?'))) return
+  guide = null; saveGuide(null)
   stopStitchMotion(false); history = clearTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Fabric cleared', 'Needle reset to the front surface.')
 })
 hoopShell.addEventListener('keydown', (event) => {
@@ -501,20 +602,46 @@ window.addEventListener('keyup', (event) => {
   }
 })
 reducedMotionQuery.addEventListener('change', () => { stopStitchMotion(false); stopViewLoop(); viewController.setReducedMotion(reducedMotionQuery.matches); const currentTarget = target; resetTransientToNeedle(false); if (currentTarget) updateTarget(currentTarget); syncMotionControl(); syncViewControl(); render() })
-window.addEventListener('blur', () => { if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(); else stopActiveThreadLoop() })
+window.addEventListener('blur', () => { floating = false; floatingNeedle.hide(); if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(); else stopActiveThreadLoop() })
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    floating = false; floatingNeedle.hide()
     if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction()
     else { stopActiveThreadLoop(); stopStitchMotion(false) }
   } else ensureActiveThreadLoop()
 })
-renderer.onResize = renderFront; backRenderer.onResize = renderBack
+renderer.onResize = () => { lastFaceInputs.front = null; renderFront() }
+backRenderer.onResize = () => { lastFaceInputs.back = null; renderBack() }
 refreshRenderItems(); syncMotionControl(); syncViewControl(); render()
-if (pieceStorage.initial.status === 'loaded') document.querySelector('#save-state')!.textContent = 'Loaded from this device'
+if (pieceStorage.initial.status === 'loaded') setText(document.querySelector('#save-state')!, 'Loaded from this device')
 if (pieceStorage.initial.status === 'invalid' || pieceStorage.initial.status === 'unavailable') showSaveState(false)
 document.querySelector('#recovery-copy')!.addEventListener('click', () => downloadRecovery(pieceStorage.recovery(history.present), 'deesewsew-recovery.json'))
 const originalRecovery = document.querySelector<HTMLButtonElement>('#recovery-source')!
 originalRecovery.hidden = pieceStorage.initial.status !== 'invalid'
 originalRecovery.addEventListener('click', () => downloadRecovery(pieceStorage.initial.raw ?? '', 'deesewsew-original-data.json'))
+
+document.querySelector('#export-artwork')!.addEventListener('click', () => {
+  try { downloadRecovery(serializeEmbroideryPiece(history.present), 'deesewsew-artwork.json'); announce('Artwork exported', 'Your current artwork was downloaded without changing it.') }
+  catch { announce('Export failed', 'Could not download this artwork. Your work is unchanged.') }
+})
+const artworkFile = document.querySelector<HTMLInputElement>('#artwork-file')!
+document.querySelector('#import-artwork')!.addEventListener('click', () => artworkFile.click())
+let importRequest = 0
+artworkFile.addEventListener('change', async () => {
+  const file = artworkFile.files?.[0], request = ++importRequest
+  artworkFile.value = ''
+  if (!file) return
+  try {
+    if (file.size > 4_000_000) throw new RangeError('Artwork size limit')
+    const imported = parseArtworkFile(await file.text())
+    if (request !== importRequest) return
+    if ((history.present.punctures.length || history.present.legacyFrontStitches.length)
+      && !window.confirm(t('Replace the current artwork? Export a copy first if you want to keep it.'))) return
+    cancelNeedleInteraction(false)
+    guide = null; saveGuide(null)
+    history = createTopologyHistory(imported); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render()
+    announce('Artwork imported', 'The validated artwork is ready to continue.')
+  } catch { if (request === importRequest) announce('Import failed', 'Invalid or unsupported artwork file. Your current work is unchanged.') }
+})
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) window.addEventListener('load', () => navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL }))

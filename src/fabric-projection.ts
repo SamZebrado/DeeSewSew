@@ -62,7 +62,7 @@ export function projectFabricPoint(point: NormalizedPoint, view: FabricViewAngle
   }
 }
 
-export function inverseProjectFabricPoint(clientX: number, clientY: number, view: FabricViewAngles, geometry: FabricProjectionGeometry): NormalizedPoint | null {
+export function inverseProjectFabricPoint(clientX: number, clientY: number, view: FabricViewAngles, geometry: FabricProjectionGeometry, allowOutside = false): NormalizedPoint | null {
   if (!validGeometry(geometry) || !Number.isFinite(clientX) || !Number.isFinite(clientY)
     || classifyFabricInteraction(view) === 'inspect-only') return null
   const yaw = radians(view.yawDeg)
@@ -94,6 +94,6 @@ export function inverseProjectFabricPoint(clientX: number, clientY: number, view
   const y = (leftA * targetY - targetX * rightA) / determinant
   const point = { x: x / geometry.size + .5, y: y / geometry.size + .5 }
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)
-    || Math.hypot(point.x - .5, point.y - .5) > FABRIC_RADIUS) return null
+    || (!allowOutside && Math.hypot(point.x - .5, point.y - .5) > FABRIC_RADIUS)) return null
   return point
 }

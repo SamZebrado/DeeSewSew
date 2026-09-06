@@ -95,8 +95,11 @@ function isPoint(value: unknown): value is NormalizedPoint {
   if (!value || typeof value !== 'object') return false
   const point = value as Partial<NormalizedPoint>
   return typeof point.x === 'number' && Number.isFinite(point.x) && point.x >= 0 && point.x <= 1
-    && typeof point.y === 'number' && Number.isFinite(point.y) && point.y >= 0 && point.y <= 1
+    && typeof point.y === 'number' && Number.isFinite(point.y) && point.y >= 0 && point.y <= 1 && isInsideFabric(point as NormalizedPoint)
 }
+const safeId = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(value)
+const safeSeed = (value: unknown): boolean => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 0xffffffff
+const MAX_ORDER = 1_000_000_000
 
 function isSide(value: unknown): value is SurfaceSide { return value === 'front' || value === 'back' }
 function samePoint(left: NormalizedPoint, right: NormalizedPoint): boolean { return left.x === right.x && left.y === right.y }
@@ -122,7 +125,8 @@ export function migrateLegacyPiece(piece: Piece): EmbroideryPieceV3 {
 }
 
 export function canPuncture(piece: EmbroideryPieceV3): boolean {
-  return piece.punctures.length < MAX_STITCHES_PER_PIECE + 1 && piece.segments.length < MAX_STITCHES_PER_PIECE
+  return Number.isSafeInteger(piece.nextOrder) && piece.nextOrder < MAX_ORDER
+    && piece.punctures.length < MAX_STITCHES_PER_PIECE + 1 && piece.segments.length + piece.legacyFrontStitches.length < MAX_STITCHES_PER_PIECE
 }
 
 export function punctureFabric(piece: EmbroideryPieceV3, position: NormalizedPoint, style: PunctureStyleV3): PunctureResultV3 {
@@ -282,9 +286,9 @@ export function topologyRenderItems(piece: EmbroideryPieceV3, side: SurfaceSide)
 function parsePuncture(value: unknown): PunctureEventV3 | null {
   if (!value || typeof value !== 'object') return null
   const source = value as Partial<PunctureEventV3>
-  if (typeof source.id !== 'string' || !isPoint(source.position) || !isSide(source.fromSide) || !isSide(source.toSide)
+  if (source.id !== `puncture-${source.order}` || !isPoint(source.position) || !isSide(source.fromSide) || !isSide(source.toSide)
     || source.toSide !== oppositeSide(source.fromSide) || !Number.isSafeInteger(source.order) || (source.order ?? 0) < 1
-    || typeof source.seed !== 'number' || !Number.isFinite(source.seed)
+    || !safeSeed(source.seed)
     || (source.type !== 'running' && source.type !== 'back') || typeof source.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(source.color)) return null
   return {
     id: source.id,
@@ -301,13 +305,13 @@ function parsePuncture(value: unknown): PunctureEventV3 | null {
 function parseSegment(value: unknown, punctureIds: ReadonlySet<string>): SurfaceThreadSegmentV3 | null {
   if (!value || typeof value !== 'object') return null
   const source = value as Partial<SurfaceThreadSegmentV3>
-  if (typeof source.id !== 'string' || typeof source.startPunctureId !== 'string' || typeof source.endPunctureId !== 'string'
+  if (source.id !== `segment-${source.order}` || typeof source.startPunctureId !== 'string' || typeof source.endPunctureId !== 'string'
     || !punctureIds.has(source.startPunctureId) || !punctureIds.has(source.endPunctureId)
     || !isPoint(source.start) || !isPoint(source.end) || !isSide(source.side)
     || !Number.isSafeInteger(source.order) || (source.order ?? 0) < 1
     || (source.type !== 'running' && source.type !== 'back') || typeof source.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(source.color)
-    || typeof source.width !== 'number' || !Number.isFinite(source.width) || source.width <= 0
-    || typeof source.seed !== 'number' || !Number.isFinite(source.seed)) return null
+    || typeof source.width !== 'number' || !Number.isFinite(source.width) || source.width < .1 || source.width > 32
+    || !safeSeed(source.seed)) return null
   return {
     id: source.id,
     startPunctureId: source.startPunctureId,
@@ -327,7 +331,7 @@ function parseV3(raw: string): EmbroideryPieceV3 | null {
   const source = JSON.parse(raw) as Partial<EmbroideryPieceV3>
   if (source.schemaVersion !== 3 || !Array.isArray(source.punctures) || !Array.isArray(source.segments)
     || !Array.isArray(source.legacyFrontStitches) || source.punctures.length > MAX_STITCHES_PER_PIECE + 1
-    || source.segments.length > MAX_STITCHES_PER_PIECE) return null
+    || source.segments.length + source.legacyFrontStitches.length > MAX_STITCHES_PER_PIECE) return null
   const punctures = source.punctures.map(parsePuncture)
   if (punctures.some((puncture) => !puncture)) return null
   const typedPunctures = punctures as PunctureEventV3[]
@@ -365,10 +369,20 @@ function parseV3(raw: string): EmbroideryPieceV3 | null {
   const legacyRaw = JSON.stringify({ schemaVersion: 1, nextOrder: source.nextOrder, stitches: source.legacyFrontStitches })
   const legacy = deserializePiece(legacyRaw)
   if (source.legacyFrontStitches.length > 0 && legacy.stitches.length !== source.legacyFrontStitches.length) return null
+  const allIds = new Set([...punctureIds, ...segmentIds])
+  const allOrders = new Set(punctureOrders)
+  for (const stitch of legacy.stitches) {
+    if (!safeId(stitch.id) || /^(puncture|segment)-/.test(stitch.id) || allIds.has(stitch.id) || allOrders.has(stitch.order)
+      || !/^#[0-9a-f]{6}$/i.test(stitch.color)
+      || !isPoint(stitch.start) || !isPoint(stitch.end) || (stitch.needleStart && !isPoint(stitch.needleStart))
+      || (stitch.needleEnd && !isPoint(stitch.needleEnd)) || stitch.width < .1 || stitch.width > 32 || !safeSeed(stitch.seed)) return null
+    allIds.add(stitch.id); allOrders.add(stitch.order)
+  }
   const highestOrder = Math.max(0, ...typedPunctures.map((puncture) => puncture.order), ...legacy.stitches.map((stitch) => stitch.order))
+  if (!Number.isSafeInteger(source.nextOrder) || source.nextOrder! <= highestOrder || source.nextOrder! > MAX_ORDER) return null
   return {
     schemaVersion: 3,
-    nextOrder: Number.isSafeInteger(source.nextOrder) && (source.nextOrder ?? 0) > highestOrder ? source.nextOrder! : highestOrder + 1,
+    nextOrder: source.nextOrder!,
     needle: cloneNeedle(source.needle as NeedleStateV3),
     punctures: typedPunctures,
     segments: typedSegments,
@@ -393,6 +407,28 @@ export function serializeEmbroideryPiece(piece: EmbroideryPieceV3): string {
   const serialized = JSON.stringify({ ...canonical, stitches })
   if (serialized.length > MAX_PIECE_STORAGE_CHARACTERS) throw new RangeError('The piece is too large for local storage.')
   return serialized
+}
+
+/** Strict file boundary: unlike recovery loading, invalid input never becomes an empty piece. */
+export function parseArtworkFile(raw: string): EmbroideryPieceV3 {
+  if (!raw || raw.length > MAX_PIECE_STORAGE_CHARACTERS) throw new RangeError('Artwork size limit')
+  const source = JSON.parse(raw)
+  let piece: EmbroideryPieceV3 | null
+  if (source?.schemaVersion === 1) {
+    if (!Array.isArray(source.stitches) || source.stitches.length > MAX_STITCHES_PER_PIECE) throw new TypeError('Invalid legacy artwork')
+    const legacy = deserializePiece(raw)
+    if (legacy.stitches.length !== source.stitches.length || !Number.isSafeInteger(source.nextOrder)
+      || source.nextOrder < legacy.nextOrder || source.nextOrder >= MAX_ORDER) throw new TypeError('Invalid legacy artwork')
+    piece = parseV3(JSON.stringify({ ...migrateLegacyPiece(legacy), nextOrder: source.nextOrder }))
+  } else piece = parseV3(raw)
+  if (!piece || piece.nextOrder >= MAX_ORDER) throw new TypeError('Invalid artwork')
+  if (serializeEmbroideryPiece(piece).length > MAX_PIECE_STORAGE_CHARACTERS - 4096) throw new RangeError('Artwork needs continuation headroom')
+  if (canPuncture(piece)) {
+    // Reserve enough serialization budget for a real next operation, including compatibility data.
+    const continued = punctureFabric(piece, { x: .5, y: .5 }, { type: 'running', color: '#b9403c' }).piece
+    serializeEmbroideryPiece(continued)
+  }
+  return piece
 }
 
 export function loadEmbroideryPiece(): EmbroideryPieceV3 {

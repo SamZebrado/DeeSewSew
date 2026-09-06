@@ -25,8 +25,10 @@ for (const [name, width, height] of [['desktop', 1440, 1000], ['tablet', 768, 10
     await expect(page.locator('.tools')).toHaveCSS('background-color', 'rgb(247, 246, 241)')
     await expect(page.locator('.tools')).toHaveCSS('backdrop-filter', 'none')
     await expect(page.locator('.tools')).toHaveCSS('border-radius', '17px')
-    await expect(page.locator('.rotation-hint')).toContainText('按住 Shift 拖动可旋转')
     await expect(page.locator('.rotation-hint')).toContainText('Hold Shift and drag to rotate')
+    await page.locator('#language-toggle').click()
+    await expect(page.locator('.rotation-hint')).toContainText('按住 Shift 拖动可旋转')
+    await expect(page.locator('.rotation-hint')).not.toContainText('Hold Shift and drag to rotate')
   })
 }
 test('normal chrome text token combinations satisfy WCAG AA 4.5:1', () => {

@@ -1,4 +1,5 @@
 export type SettledCacheAction = 'reuse' | 'append' | 'rebuild'
+export const MAX_RETIRED_CACHE_KEYS = 1024
 
 export type SettledCacheInvalidationReason =
   | 'initial'
@@ -30,6 +31,7 @@ export class SettledPrefixCache<T> {
   private cachedKeys: string[] = []
   private lastInput: readonly T[] | null = null
   private retiredKeys = new Set<string>()
+  private historyOverflow = false
   private invalidation: SettledCacheInvalidationReason | null = 'initial'
 
   constructor(keyOf: (value: T) => string) {
@@ -61,6 +63,9 @@ export class SettledPrefixCache<T> {
     }
 
     if (to === from) return { action: 'reuse', from, to, reason: 'unchanged' }
+    // After a very long edit history, conservatively rebuild on additions instead
+    // of retaining every historical geometry key. Unchanged dynamic frames stay O(1).
+    if (this.historyOverflow) return { action: 'rebuild', from: 0, to, reason: 'history' }
     for (let index = from; index < to; index += 1) {
       const candidate = input[index]
       if (candidate === undefined || this.retiredKeys.has(this.keyOf(candidate))) {
@@ -75,7 +80,10 @@ export class SettledPrefixCache<T> {
       const nextRefs = input.slice(0, plan.to)
       const nextKeys = nextRefs.map(this.keyOf)
       const activeKeys = new Set(nextKeys)
-      for (const key of this.cachedKeys) if (!activeKeys.has(key)) this.retiredKeys.add(key)
+      for (const key of this.cachedKeys) if (!activeKeys.has(key) && !this.historyOverflow) {
+        this.retiredKeys.add(key)
+        if (this.retiredKeys.size > MAX_RETIRED_CACHE_KEYS) { this.retiredKeys.clear(); this.historyOverflow = true }
+      }
       this.cachedRefs = nextRefs
       this.cachedKeys = nextKeys
       this.invalidation = null

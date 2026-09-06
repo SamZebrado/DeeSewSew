@@ -1,6 +1,26 @@
 import { interpolate, type NormalizedPoint } from './stitch-model'
 
 export type CubicThreadPath = readonly [NormalizedPoint, NormalizedPoint, NormalizedPoint, NormalizedPoint]
+export interface ThreadEndpoints {
+  anchorHole: NormalizedPoint
+  pulledHole: NormalizedPoint
+  threadEye: NormalizedPoint
+}
+const near = (a: NormalizedPoint, b: NormalizedPoint) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-8
+const reversed = (curve: CubicThreadPath): CubicThreadPath => [curve[3], curve[2], curve[1], curve[0]]
+export function orientThreadPaths(loose: readonly CubicThreadPath[], settled: CubicThreadPath, endpoints: ThreadEndpoints): { loose: readonly CubicThreadPath[]; settled: CubicThreadPath } {
+  const source = loose.length && near(loose[0]![0], endpoints.threadEye) && near(loose.at(-1)![3], endpoints.anchorHole) ? [...loose].reverse().map(reversed) : loose
+  const goal = near(settled[0], endpoints.pulledHole) && near(settled[3], endpoints.anchorHole) ? reversed(settled) : settled
+  if (source.length && (!near(source[0]![0], endpoints.anchorHole) || !near(source.at(-1)![3], endpoints.threadEye))) throw new TypeError('Loose path does not match semantic hole/eye endpoints')
+  if (!near(goal[0], endpoints.anchorHole) || !near(goal[3], endpoints.pulledHole)) throw new TypeError('Settled path does not match semantic punctures')
+  return { loose: source, settled: goal }
+}
+/** Only the eye-adjacent handle moves during shaft passage; distant slack stays captured. */
+export function transportThreadEye(loose: readonly CubicThreadPath[], eye: NormalizedPoint): CubicThreadPath[] {
+  if (!loose.length) return []
+  const end = loose.at(-1)![3], dx = eye.x - end.x, dy = eye.y - end.y
+  return loose.map((curve, i) => i === loose.length - 1 ? [curve[0], curve[1], { x: curve[2].x + dx, y: curve[2].y + dy }, { ...eye }] : curve)
+}
 export function splitThreadPath(path: CubicThreadPath, t: number): [CubicThreadPath, CubicThreadPath] {
   const a = interpolate(path[0], path[1], t), b = interpolate(path[1], path[2], t), c = interpolate(path[2], path[3], t)
   const d = interpolate(a, b, t), e = interpolate(b, c, t), p = interpolate(d, e, t)
@@ -60,7 +80,8 @@ function arcParameter(lengths: readonly number[], fraction: number): number {
 }
 /** Exact subcurves at both ends; arc-length-local weights between them.
  * Fixed subdivision budgets keep active work linear in the small rope size. */
-export function tightenThreadPath(loose: readonly CubicThreadPath[], settled: CubicThreadPath, progress: number): CubicThreadPath[] {
+export function tightenThreadPath(loose: readonly CubicThreadPath[], settled: CubicThreadPath, progress: number, endpoints?: ThreadEndpoints): CubicThreadPath[] {
+  if (endpoints) ({ loose, settled } = orientThreadPaths(loose, settled, endpoints))
   if (!loose.length) return [settled]
   const p = clamp01(progress)
   if (p === 0) return [...loose]
