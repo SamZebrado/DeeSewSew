@@ -396,7 +396,32 @@ export function serializeEmbroideryPiece(piece: EmbroideryPieceV3): string {
 }
 
 export function loadEmbroideryPiece(): EmbroideryPieceV3 {
-  return deserializeEmbroideryPiece(localStorage.getItem(PIECE_STORAGE_KEY))
+  return readEmbroideryPiece().piece
+}
+
+export interface PieceLoadResult {
+  piece: EmbroideryPieceV3
+  status: 'loaded' | 'missing' | 'invalid' | 'unavailable'
+  raw: string | null
+}
+
+/** Reading never writes: invalid or future-version bytes remain recoverable. */
+export function readEmbroideryPiece(): PieceLoadResult {
+  let raw: string | null
+  try { raw = localStorage.getItem(PIECE_STORAGE_KEY) }
+  catch { return { piece: emptyEmbroideryPiece(), status: 'unavailable', raw: null } }
+  if (raw === null) return { piece: emptyEmbroideryPiece(), status: 'missing', raw }
+  try {
+    if (raw.length > MAX_PIECE_STORAGE_CHARACTERS) throw new RangeError('Oversize piece')
+    const value = JSON.parse(raw)
+    const piece = value?.schemaVersion === 3 ? parseV3(raw) : null
+    if (piece) return { piece, status: 'loaded', raw }
+    if (value?.schemaVersion === 1 && Array.isArray(value.stitches)) {
+      const legacy = deserializePiece(raw)
+      if (legacy.stitches.length === value.stitches.length) return { piece: migrateLegacyPiece(legacy), status: 'loaded', raw }
+    }
+  } catch { /* Keep the exact source for recovery. */ }
+  return { piece: emptyEmbroideryPiece(), status: 'invalid', raw }
 }
 
 export function saveEmbroideryPiece(piece: EmbroideryPieceV3): boolean {

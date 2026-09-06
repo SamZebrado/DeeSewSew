@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readdir, writeFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 
 const dist = new URL('../dist/', import.meta.url)
@@ -16,7 +16,12 @@ async function files(directory) {
 }
 
 const assets = (await files(dist.pathname)).sort()
-const version = createHash('sha256').update(assets.join('\n')).digest('hex').slice(0, 12)
+const hash = createHash('sha256')
+for (const asset of assets) {
+  const bytes = await readFile(join(dist.pathname, asset))
+  hash.update(JSON.stringify([asset, bytes.length])).update(bytes)
+}
+const version = hash.digest('hex').slice(0, 12)
 const root = '/DeeSewSew/'
 const precache = assets.map((asset) => `${root}${asset === 'index.html' ? '' : asset}`)
 
@@ -25,21 +30,30 @@ const ROOT = '${root}'
 const PRECACHE = ${JSON.stringify(precache, null, 2)}
 
 self.addEventListener('install', (event) => {
+  // Wait for a complete shell; activation occurs after old clients release it.
   event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(PRECACHE)))
-  self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== VERSION).map((key) => caches.delete(key)))))
-  self.clients.claim()
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('deesewsew-') && key !== VERSION).map((key) => caches.delete(key)))).then(() => self.clients.claim()))
 })
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin + ROOT)) return
-  event.respondWith(caches.match(event.request, { ignoreVary: true }).then((cached) => cached || fetch(event.request).then((response) => {
-    if (response.ok) caches.open(VERSION).then((cache) => cache.put(event.request, response.clone()))
-    return response
-  })).catch(() => caches.match(ROOT)))
+  event.respondWith((async () => {
+    const cache = await caches.open(VERSION)
+    const cached = await cache.match(event.request, { ignoreVary: true })
+    if (cached) return cached
+    try {
+      return await fetch(event.request)
+    } catch (error) {
+      if (event.request.mode === 'navigate') {
+        const shell = await cache.match(ROOT)
+        if (shell) return shell
+      }
+      throw error
+    }
+  })())
 })
 `
 

@@ -2,15 +2,16 @@ import './style.css'
 import { EmbroideryRenderer, type StitchMotion, type TransientThreadVisual } from './renderer'
 import { FABRIC_RADIUS, type NormalizedPoint, type Stitch, type StitchType } from './stitch-model'
 import { makeVisualScene } from './visual-scenes'
-import { MAX_CUSTOM_COLORS, addCustomColor, loadSettings, normalizeHexColor, saveSettings } from './settings'
+import { MAX_CUSTOM_COLORS, addCustomColor, loadSettings, normalizeHexColor, saveSettings as writeSettings, type StudioSettings } from './settings'
 import { HoopViewController, touchTargetOffset, type HoopViewSnapshot } from './hoop-view-controller'
 import { inverseProjectFabricPoint } from './fabric-projection'
 import {
-  canPuncture, clearTopology, commitPuncture, createTopologyHistory, loadEmbroideryPiece,
-  migrateLegacyPiece, punctureFabric, redoTopology, saveEmbroideryPiece, topologyRenderItems,
+  canPuncture, clearTopology, commitPuncture, createTopologyHistory,
+  migrateLegacyPiece, punctureFabric, redoTopology, topologyRenderItems,
   undoTopology, type SurfaceSide,
 } from './embroidery-topology'
 import { STITCH_MOTION_DURATION_MS, sampleStitchMotion } from './stitch-motion'
+import { createPieceStorage, downloadRecovery } from './piece-storage'
 import {
   activeThreadSag, createActiveThread, retargetActiveThread, snapshotActiveThread, stepActiveThread,
   type ActiveThreadState,
@@ -29,7 +30,7 @@ const depthRings = [-9, -6, -3, 0, 3, 6, 9].map((depth) => `<i class="hoop-depth
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <main class="studio">
-    <header class="masthead"><div><p class="eyebrow">A tiny embroidery studio in your browser</p><h1>DeeSewSew</h1></div><p class="save-state" id="save-state" aria-live="polite">Saved on this device</p></header>
+    <header class="masthead"><div><p class="eyebrow">A tiny embroidery studio in your browser</p><h1>DeeSewSew</h1></div><div><p class="save-state" id="save-state" aria-live="polite">Not saved yet</p><button id="recovery-copy" type="button" hidden>Download recovery copy</button><button id="recovery-source" type="button" hidden>Download original stored data</button></div></header>
     <section class="workspace" aria-label="Embroidery studio">
       <div class="hoop-stage">
         <div class="hoop-shell" id="hoop-shell" data-view-state="front" data-view-mode="manual" data-needle-side="front" role="group" tabindex="0" aria-label="Embroidery hoop view. Move the needle, click to puncture, use the rim or arrow keys to rotate, Home for front, and End for back.">
@@ -59,7 +60,8 @@ const canvas = document.querySelector<HTMLCanvasElement>('#embroidery')!
 const backCanvas = document.querySelector<HTMLCanvasElement>('#embroidery-back')!
 const renderer = new EmbroideryRenderer(canvas, 'front')
 const backRenderer = new EmbroideryRenderer(backCanvas, 'back')
-let piece = loadEmbroideryPiece()
+const pieceStorage = createPieceStorage()
+let piece = pieceStorage.initial.piece
 const scene = import.meta.env.DEV ? makeVisualScene(new URLSearchParams(location.search).get('scene') ?? '') : null
 if (scene) piece = migrateLegacyPiece({ schemaVersion: 1, nextOrder: scene.length + 1, stitches: scene })
 let history = createTopologyHistory(piece)
@@ -78,6 +80,7 @@ let motionSide: SurfaceSide | null = null
 let motionFrame: number | null = null
 let viewFrame: number | null = null
 let stitchPointerId: number | null = null
+let viewPointerId: number | null = null
 const viewController = new HoopViewController(reducedMotionQuery.matches)
 const motionIsActive = (): boolean => settings.motionEnabled && !reducedMotionQuery.matches
 
@@ -133,7 +136,25 @@ function render(): void {
   renderFront(); renderBack(); updateHistoryControls()
 }
 function announce(title: string, copy: string): void { statusTitle.textContent = title; statusCopy.textContent = copy }
-function persist(): void { piece = history.present; saveEmbroideryPiece(piece) }
+function showSaveState(saved: boolean): void {
+  document.querySelector('#save-state')!.textContent = saved ? 'Saved on this device' : 'Work not saved — download a recovery copy before leaving'
+  document.querySelector<HTMLButtonElement>('#recovery-copy')!.hidden = saved
+}
+function saveSettings(value: StudioSettings): void {
+  const saved = writeSettings(value)
+  let warning = document.querySelector('#settings-save-warning')
+  if (!warning) {
+    warning = document.createElement('p')
+    warning.id = 'settings-save-warning'
+    warning.setAttribute('role', 'status')
+    document.querySelector('.masthead')!.append(warning)
+  }
+  warning.textContent = saved ? '' : 'Palette and motion settings are temporary; device storage failed.'
+}
+function persist(): void {
+  piece = history.present
+  showSaveState(pieceStorage.save(piece))
+}
 function setMotionDataset(state: 'idle' | 'off' | 'running', phase: string = state, progress = '0', side: SurfaceSide | null = null): void {
   for (const [surface, surfaceCanvas] of [['front', canvas], ['back', backCanvas]] as const) {
     surfaceCanvas.dataset.motionState = state === 'running' && surface !== side ? (motionIsActive() ? 'idle' : 'off') : state
@@ -276,6 +297,21 @@ function appendCustomSwatch(value: string): void {
   button.setAttribute('aria-label', colorName(value)); button.dataset.color = value; button.dataset.name = colorName(value); button.style.setProperty('--swatch', value); button.innerHTML = '<span></span>'; palette.append(button)
 }
 function releaseHoopPointer(pointerId: number): void { if (hoopShell.hasPointerCapture(pointerId)) hoopShell.releasePointerCapture(pointerId) }
+function cancelNeedleInteraction(redraw = true): void {
+  const pointerId = stitchPointerId
+  // Clear ownership before releasing capture, which can synchronously dispatch loss.
+  stitchPointerId = null
+  if (pointerId !== null) releaseHoopPointer(pointerId)
+  const cameraPointer = viewPointerId
+  viewPointerId = null
+  if (cameraPointer !== null) {
+    viewController.cancelGesture(cameraPointer)
+    releaseHoopPointer(cameraPointer)
+    syncViewControl()
+  }
+  stopStitchMotion(false)
+  resetTransientToNeedle(redraw)
+}
 
 hoopShell.addEventListener('pointerdown', (event) => {
   if (!event.isPrimary || event.button !== 0 || stitchPointerId !== null || viewController.snapshot().gestureActive) return
@@ -283,6 +319,7 @@ hoopShell.addEventListener('pointerdown', (event) => {
   if (point) { stopStitchMotion(false); stitchPointerId = event.pointerId; hoopShell.setPointerCapture(event.pointerId); updateTarget(point); return }
   stopViewLoop()
   if (!viewController.beginGesture(event.pointerId, event.clientX, event.clientY)) return
+  viewPointerId = event.pointerId
   hoopShell.setPointerCapture(event.pointerId); syncViewControl(); render()
 })
 hoopShell.addEventListener('pointermove', (event) => {
@@ -297,7 +334,7 @@ hoopShell.addEventListener('pointermove', (event) => {
   if (next) updateTarget(next)
 })
 hoopShell.addEventListener('pointerup', (event) => {
-  if (viewController.endGesture(event.pointerId)) { releaseHoopPointer(event.pointerId); syncViewControl(); announceViewPosition('View adjusted'); render(); return }
+  if (viewController.endGesture(event.pointerId)) { viewPointerId = null; releaseHoopPointer(event.pointerId); syncViewControl(); announceViewPosition('View adjusted'); render(); return }
   if (stitchPointerId !== event.pointerId) return
   stitchPointerId = null; releaseHoopPointer(event.pointerId); const point = pointerPoint(event)
   if (!point) { resetTransientToNeedle(); return }
@@ -316,14 +353,12 @@ hoopShell.addEventListener('pointerup', (event) => {
   if (motionItem) startStitchMotion(motionItem, motionSurface, loosePoints); else render()
 })
 hoopShell.addEventListener('pointercancel', (event) => {
-  if (viewController.cancelGesture(event.pointerId)) { syncViewControl(); announceViewPosition('View gesture cancelled'); render(); return }
-  if (stitchPointerId === event.pointerId) { stitchPointerId = null; releaseHoopPointer(event.pointerId); resetTransientToNeedle() }
+  if (viewPointerId === event.pointerId || stitchPointerId === event.pointerId) cancelNeedleInteraction()
 })
 hoopShell.addEventListener('lostpointercapture', (event) => {
-  if (viewController.cancelGesture(event.pointerId)) { syncViewControl(); announceViewPosition('View gesture cancelled'); render() }
-  if (stitchPointerId === event.pointerId) { stitchPointerId = null; resetTransientToNeedle() }
+  if (viewPointerId === event.pointerId || stitchPointerId === event.pointerId) cancelNeedleInteraction()
 })
-canvas.addEventListener('contextmenu', (event) => { event.preventDefault(); resetTransientToNeedle() })
+canvas.addEventListener('contextmenu', (event) => { event.preventDefault(); cancelNeedleInteraction() })
 
 palette.addEventListener('click', (event) => { const button = (event.target as Element).closest<HTMLButtonElement>('.swatch'); if (button?.dataset.color) selectColor(button.dataset.color) })
 addColorButton.addEventListener('click', () => {
@@ -338,36 +373,51 @@ document.querySelectorAll<HTMLButtonElement>('[data-stitch]').forEach((button) =
   button.classList.add('selected'); button.setAttribute('aria-checked', 'true'); stitchType = button.dataset.stitch as StitchType; announce('Routing changed', `${button.textContent?.trim()} routing will shape the next surface segment.`)
 }))
 rotateButton.addEventListener('click', () => {
+  cancelNeedleInteraction(false)
   if (viewController.snapshot().mode === 'auto') { viewController.stopAuto(); stopViewLoop(); syncViewControl(); announceViewPosition('Rotation paused'); render(); return }
   if (viewController.startAuto(performance.now())) { syncViewControl(); ensureViewLoop(); render(); announce('3D view rotating', 'Puncture is paused while the hoop turns. Stop anywhere to evaluate the angle.') }
 })
-frontButton.addEventListener('click', () => { stopViewLoop(); viewController.snapFront(); syncViewControl(); announceViewPosition(); render() })
-backButton.addEventListener('click', () => { stopViewLoop(); viewController.snapBack(); syncViewControl(); announceViewPosition(); render() })
+frontButton.addEventListener('click', () => { if (stitchPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapFront(); syncViewControl(); announceViewPosition(); render() })
+backButton.addEventListener('click', () => { if (stitchPointerId !== null) cancelNeedleInteraction(false); stopViewLoop(); viewController.snapBack(); syncViewControl(); announceViewPosition(); render() })
 motionButton.addEventListener('click', () => {
   settings = { ...settings, motionEnabled: !settings.motionEnabled }; saveSettings(settings); stopStitchMotion(false); syncMotionControl(); render()
   announce(settings.motionEnabled ? 'Stitch motion on' : 'Stitch motion off', settings.motionEnabled ? 'Punctures tighten from the loose thread you are moving.' : 'Live thread following remains; punctures settle immediately.')
 })
-undoButton.addEventListener('click', () => { stopStitchMotion(false); history = undoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture undone', `Needle restored to the ${history.present.needle.side}.`) })
-redoButton.addEventListener('click', () => { stopStitchMotion(false); history = redoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture restored', `Needle is on the ${history.present.needle.side}.`) })
+undoButton.addEventListener('click', () => { cancelNeedleInteraction(false); history = undoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture undone', `Needle restored to the ${history.present.needle.side}.`) })
+redoButton.addEventListener('click', () => { cancelNeedleInteraction(false); history = redoTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Puncture restored', `Needle is on the ${history.present.needle.side}.`) })
 clearButton.addEventListener('click', () => {
+  cancelNeedleInteraction(false)
   if (clearButton.disabled || !window.confirm('Clear every puncture and thread segment from this fabric?')) return
   stopStitchMotion(false); history = clearTopology(history); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Fabric cleared', 'Needle reset to the front surface.')
 })
 hoopShell.addEventListener('keydown', (event) => {
   if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
-  event.preventDefault(); stopViewLoop()
+  event.preventDefault(); if (stitchPointerId !== null) cancelNeedleInteraction(false); stopViewLoop()
   if (viewController.handleKey(event.key)) { syncViewControl(); announceViewPosition('View adjusted'); render() }
 })
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    cancelNeedleInteraction()
     if (viewController.snapshot().mode === 'auto') { viewController.stopAuto(); stopViewLoop(); syncViewControl(); announceViewPosition('Rotation paused'); render() }
     else { resetTransientToNeedle(); announceViewPosition('Needle reset') }
   }
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redoButton.click() : undoButton.click() }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); cancelNeedleInteraction(); event.shiftKey ? redoButton.click() : undoButton.click() }
 })
 reducedMotionQuery.addEventListener('change', () => { stopStitchMotion(false); stopViewLoop(); viewController.setReducedMotion(reducedMotionQuery.matches); const currentTarget = target; resetTransientToNeedle(false); if (currentTarget) updateTarget(currentTarget); syncMotionControl(); syncViewControl(); render() })
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopActiveThreadLoop(); else ensureActiveThreadLoop() })
+window.addEventListener('blur', () => { if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(); else stopActiveThreadLoop() })
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction()
+    else stopActiveThreadLoop()
+  } else ensureActiveThreadLoop()
+})
 renderer.onResize = renderFront; backRenderer.onResize = renderBack
 refreshRenderItems(); syncMotionControl(); syncViewControl(); render()
+if (pieceStorage.initial.status === 'loaded') document.querySelector('#save-state')!.textContent = 'Loaded from this device'
+if (pieceStorage.initial.status === 'invalid' || pieceStorage.initial.status === 'unavailable') showSaveState(false)
+document.querySelector('#recovery-copy')!.addEventListener('click', () => downloadRecovery(pieceStorage.recovery(history.present), 'deesewsew-recovery.json'))
+const originalRecovery = document.querySelector<HTMLButtonElement>('#recovery-source')!
+originalRecovery.hidden = pieceStorage.initial.status !== 'invalid'
+originalRecovery.addEventListener('click', () => downloadRecovery(pieceStorage.initial.raw ?? '', 'deesewsew-original-data.json'))
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) window.addEventListener('load', () => navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL }))

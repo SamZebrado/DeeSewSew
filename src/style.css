@@ -18,6 +18,7 @@ button:focus-visible,input:focus-visible,.hoop-shell:focus-visible { outline:3px
 .eyebrow { margin:0 0 4px; color:var(--rose); font:600 clamp(10px,1vw,12px)/1.2 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.14em; }
 h1 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:clamp(38px,5vw,66px); line-height:.98; letter-spacing:-.05em; font-weight:500; }
 .save-state { margin:0 0 5px; color:var(--ink-soft); font-size:13px; }
+#recovery-copy,#recovery-source { min-height:44px; max-width:100%; border:1px solid var(--line); border-radius:8px; background:#f4efe6; color:var(--ink-soft); cursor:pointer; }
 .save-state::before { content:""; display:inline-block; width:7px; height:7px; margin-right:8px; border-radius:50%; background:#68805f; }
 .workspace { width:min(1220px,100%); margin:0 auto; display:grid; grid-template-columns:minmax(0,1fr) minmax(264px,312px); gap:clamp(24px,4vw,64px); align-items:center; position:relative; z-index:1; }
 
@@ -95,7 +96,7 @@ button:disabled { opacity:.38; cursor:default; }
 @media (max-width:820px) {
   .studio { padding:20px 16px max(24px,env(safe-area-inset-bottom)); }
   .masthead { margin-bottom:16px; }
-  .save-state { display:none; }
+  .save-state { font-size:11px; }
   .workspace { grid-template-columns:1fr; gap:18px; }
   .hoop-shell { width:min(66svh,92vw,650px); }
   .tools { width:min(650px,100%); padding:4px 16px 16px; }

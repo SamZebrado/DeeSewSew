@@ -38,7 +38,7 @@ test('responsive viewports remain stitchable, circular, unobstructed, and overfl
     const metrics = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
-      minimumButtonHeight: Math.min(...[...document.querySelectorAll('button')].map((button) => button.getBoundingClientRect().height)),
+      minimumButtonHeight: Math.min(...[...document.querySelectorAll('button')].filter((button) => button.getClientRects().length > 0).map((button) => button.getBoundingClientRect().height)),
     }))
     expect(metrics.scrollWidth).toBe(metrics.clientWidth)
     expect(metrics.minimumButtonHeight).toBeGreaterThanOrEqual(44)

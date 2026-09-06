@@ -171,21 +171,27 @@ function serializeLegacySettings(settings: StudioSettingsV2): string {
 
 export function loadSettings(reducedMotion = false): StudioSettingsV2 {
   try {
-    const current = tryDeserializeSettings(localStorage.getItem(SETTINGS_STORAGE_KEY), reducedMotion)
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    const current = tryDeserializeSettings(raw, reducedMotion)
     if (current) return current
     const migrated = tryDeserializeSettings(localStorage.getItem(LEGACY_SETTINGS_STORAGE_KEY), reducedMotion)
     if (!migrated) return defaultSettings(reducedMotion)
-    saveSettings(migrated)
+    if (raw === null) saveSettings(migrated)
     return migrated
   } catch {
     return defaultSettings(reducedMotion)
   }
 }
 
-export function saveSettings(settings: StudioSettings): void {
-  const normalized = deserializeSettings(serializeSettings(settings))
-  try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(normalized)) }
-  catch { /* The studio remains usable when current-version storage is unavailable. */ }
+export function saveSettings(settings: StudioSettings): boolean {
+  let normalized: StudioSettingsV2
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (raw !== null && !tryDeserializeSettings(raw, false)) return false
+    normalized = deserializeSettings(serializeSettings(settings))
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
+  } catch { return false }
   try { localStorage.setItem(LEGACY_SETTINGS_STORAGE_KEY, serializeLegacySettings(normalized)) }
   catch { /* The current-version setting remains usable if the compatibility write fails. */ }
+  return true
 }

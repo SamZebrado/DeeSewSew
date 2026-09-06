@@ -1,5 +1,27 @@
 import { expect, test } from '@playwright/test'
 
+test('production worker isolates cache deletion and resource fallback', async ({ page, context }) => {
+  await page.addInitScript(() => {
+    const original = navigator.serviceWorker.register.bind(navigator.serviceWorker)
+    navigator.serviceWorker.register = async (...args) => {
+      await Promise.all(['deesewsew-old', 'beatgarden-offline-v1', 'another-project-cache'].map(name => caches.open(name)))
+      return original(...args)
+    }
+  })
+  await page.goto('./')
+  await page.evaluate(async () => { await navigator.serviceWorker.ready })
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+  const names = await page.evaluate(() => caches.keys())
+  expect(names).toContain('beatgarden-offline-v1')
+  expect(names).toContain('another-project-cache')
+  expect(names).not.toContain('deesewsew-old')
+  await context.setOffline(true)
+  const missing = await page.evaluate(() => fetch('./missing-resource.js').then(response => response.headers.get('content-type')).catch(() => 'network-error'))
+  expect(missing).toBe('network-error')
+  await page.goto('./offline-navigation')
+  await expect(page.getByRole('heading', { name: 'DeeSewSew' })).toBeVisible()
+})
+
 test('app shell reloads and remains stitchable with the network offline', async ({ page, context }) => {
   await page.goto('./')
   await page.evaluate(() => localStorage.clear())
