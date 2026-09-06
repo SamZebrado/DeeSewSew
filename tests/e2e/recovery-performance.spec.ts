@@ -3,6 +3,7 @@ import { cpus, platform, release } from 'node:os'
 import { writeFile } from 'node:fs/promises'
 import { emptyEmbroideryPiece, punctureFabric, serializeEmbroideryPiece } from '../../src/embroidery-topology'
 import { createActiveThread, retargetActiveThread, stepActiveThread } from '../../src/active-thread'
+import { looseThreadPath, tightenThreadPath, type CubicThreadPath } from '../../src/thread-path'
 
 test.use({ video: 'off' })
 test('1000 canonical segments: solver CPU and browser frame/feedback proxy', async ({ page }, info) => {
@@ -55,6 +56,16 @@ test('1000 canonical segments: solver CPU and browser frame/feedback proxy', asy
     if (index >= 1000) samples.push(performance.now() - start)
   }
   const percentile = (values: number[], q: number) => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) * q)]
+  const loose = looseThreadPath(rope.points)
+  const goal: CubicThreadPath = [{ x: .3, y: .4 }, { x: .4, y: .4 }, { x: .6, y: .5 }, { x: .7, y: .5 }]
+  const frontSamples: number[] = []
+  for (let i = 0; i < 2000; i++) {
+    const started = performance.now()
+    tightenThreadPath(loose, goal, (i % 99 + 1) / 100)
+    if (i >= 500) frontSamples.push(performance.now() - started)
+  }
+  await writeFile(info.outputPath('tension-kernel-performance.json'), JSON.stringify({ nodeCpuP95Ms: percentile(frontSamples, .95), samples: frontSamples.length, looseCurves: loose.length, limitation: 'Pure geometry kernel in Node, not browser paint or device latency.' }, null, 2))
+  expect(percentile(frontSamples, .95)).toBeLessThan(2)
   const report = { hardware: cpus()[0]?.model, platform: `${platform()} ${release()}`, recording: false, motion: true, segments: 1000, solverNodeCpuP95Ms: percentile(samples, .95), browser, nextRafFeedbackProxyP95Ms: percentile(browser.feedback, .95), browserFrameIntervalP95Ms: percentile(browser.intervals, .95), framesOver50Ms: browser.intervals.filter(dt => dt > 50).length, limitations: 'Solver measured in Node, not browser. Synthetic pointer event to next RAF is a feedback scheduling proxy, not hardware input-to-photon latency. Commit and undo are synchronous handler durations.', pageErrors: errors }
   await page.reload()
   const reloadNavigation = await page.evaluate(() => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).toJSON())

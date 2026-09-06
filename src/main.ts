@@ -1,4 +1,5 @@
 import './style.css'
+import { TouchRotation } from './touch-rotation'
 import { EmbroideryRenderer, type StitchMotion, type TransientThreadVisual } from './renderer'
 import { FABRIC_RADIUS, type NormalizedPoint, type Stitch, type StitchType } from './stitch-model'
 import { makeVisualScene } from './visual-scenes'
@@ -43,6 +44,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
         <div class="needle-state" id="needle-state" aria-live="polite"><span class="needle-state-icon" aria-hidden="true">⌁</span><strong id="needle-side">Needle: front</strong><small id="edit-state">Front surface editable</small></div>
         <p class="canvas-help" id="canvas-help">Move the needle; the loose thread follows. Click to puncture, then choose where it emerges.</p>
+        <p class="rotation-hint">按住 Shift 拖动可旋转 · 双指拖动旋转<br>Hold Shift and drag to rotate · Drag with two fingers to rotate</p>
       </div>
       <aside class="tools" aria-label="Stitch controls">
         <section class="tool-group"><div class="tool-heading"><h2>Thread</h2><span id="color-name">${colorName(settings.selectedColor)}</span></div><div class="palette" id="palette" role="radiogroup" aria-label="Thread color">${colors.map(([name, value]) => swatchMarkup(name, value, settings.selectedColor === value)).join('')}${settings.customColors.map((value) => swatchMarkup(colorName(value), value, settings.selectedColor === value)).join('')}</div><div class="custom-color-row"><label class="color-picker" for="custom-color"><input id="custom-color" type="color" value="${settings.selectedColor}" aria-label="Choose a custom thread color"><span>Custom</span></label><button class="add-color-button" id="add-color" type="button">Add color</button></div></section>
@@ -84,6 +86,9 @@ let tails: { side: SurfaceSide; visual: StitchMotion; startedAt: number; from: n
 let viewFrame: number | null = null
 let stitchPointerId: number | null = null
 let viewPointerId: number | null = null
+const touchRotation = new TouchRotation()
+const TOUCH_CAMERA_ID = -1
+let shiftRotation = false
 const viewController = new HoopViewController(reducedMotionQuery.matches)
 const motionIsActive = (): boolean => settings.motionEnabled && !reducedMotionQuery.matches
 
@@ -336,7 +341,9 @@ function appendCustomSwatch(value: string): void {
   button.setAttribute('aria-label', colorName(value)); button.dataset.color = value; button.dataset.name = colorName(value); button.style.setProperty('--swatch', value); button.innerHTML = '<span></span>'; palette.append(button)
 }
 function releaseHoopPointer(pointerId: number): void { if (hoopShell.hasPointerCapture(pointerId)) hoopShell.releasePointerCapture(pointerId) }
-function cancelNeedleInteraction(redraw = true): void {
+function cancelNeedleInteraction(redraw = true, keepTouchGesture = false): void {
+  if (!keepTouchGesture) touchRotation.cancel()
+  shiftRotation = false
   const pointerId = stitchPointerId
   // Clear ownership before releasing capture, which can synchronously dispatch loss.
   stitchPointerId = null
@@ -345,7 +352,7 @@ function cancelNeedleInteraction(redraw = true): void {
   viewPointerId = null
   if (cameraPointer !== null) {
     viewController.cancelGesture(cameraPointer)
-    releaseHoopPointer(cameraPointer)
+    if (cameraPointer !== TOUCH_CAMERA_ID) releaseHoopPointer(cameraPointer)
     syncViewControl()
   }
   stopStitchMotion(false)
@@ -353,7 +360,29 @@ function cancelNeedleInteraction(redraw = true): void {
 }
 
 hoopShell.addEventListener('pointerdown', (event) => {
+  if (event.pointerType === 'touch') {
+    const action = touchRotation.down(event.pointerId, event.clientX, event.clientY, event.isPrimary)
+    hoopShell.setPointerCapture(event.pointerId)
+    if (action === 'rotate') {
+      const firstTouch = stitchPointerId ?? viewPointerId
+      cancelNeedleInteraction(false, true)
+      if (firstTouch !== null && firstTouch !== TOUCH_CAMERA_ID) hoopShell.setPointerCapture(firstTouch)
+      const center = touchRotation.centroid()!
+      stopViewLoop()
+      viewController.beginGesture(TOUCH_CAMERA_ID, center.x, center.y)
+      viewPointerId = TOUCH_CAMERA_ID
+      syncViewControl(); render(); return
+    }
+    if (action === 'ignore') return
+  }
   if (!event.isPrimary || event.button !== 0 || stitchPointerId !== null || viewController.snapshot().gestureActive) return
+  if (event.pointerType === 'mouse' && event.shiftKey) {
+    cancelNeedleInteraction(false)
+    stopViewLoop()
+    viewController.beginGesture(event.pointerId, event.clientX, event.clientY)
+    viewPointerId = event.pointerId; shiftRotation = true
+    hoopShell.setPointerCapture(event.pointerId); syncViewControl(); render(); return
+  }
   viewController.tick(performance.now()); const point = pointerPoint(event)
   if (point) { interruptStitchMotion(); stitchPointerId = event.pointerId; hoopShell.setPointerCapture(event.pointerId); updateTarget(point); return }
   stopViewLoop()
@@ -362,6 +391,15 @@ hoopShell.addEventListener('pointerdown', (event) => {
   hoopShell.setPointerCapture(event.pointerId); syncViewControl(); render()
 })
 hoopShell.addEventListener('pointermove', (event) => {
+  if (event.pointerType === 'touch') {
+    const center = touchRotation.move(event.pointerId, event.clientX, event.clientY)
+    if (center && viewPointerId === TOUCH_CAMERA_ID) {
+      const rect = hoopShell.getBoundingClientRect()
+      viewController.updateGesture(TOUCH_CAMERA_ID, center.x, center.y, Math.max(1, Math.min(rect.width, rect.height)))
+      syncViewControl(); render()
+    }
+    if (touchRotation.blocked) return
+  }
   if (!event.isPrimary) return
   if (viewController.snapshot().gestureActive) {
     const rect = hoopShell.getBoundingClientRect()
@@ -373,6 +411,13 @@ hoopShell.addEventListener('pointermove', (event) => {
   if (next) updateTarget(next)
 })
 hoopShell.addEventListener('pointerup', (event) => {
+  if (event.pointerType === 'touch' && touchRotation.up(event.pointerId)) {
+    if (!touchRotation.centroid() && viewPointerId === TOUCH_CAMERA_ID) {
+      viewController.endGesture(TOUCH_CAMERA_ID); viewPointerId = null
+      syncViewControl(); announceViewPosition('View adjusted'); render()
+    }
+    releaseHoopPointer(event.pointerId); return
+  }
   if (viewController.endGesture(event.pointerId)) { viewPointerId = null; releaseHoopPointer(event.pointerId); syncViewControl(); announceViewPosition('View adjusted'); render(); return }
   if (stitchPointerId !== event.pointerId) return
   stitchPointerId = null; releaseHoopPointer(event.pointerId); const point = pointerPoint(event)
@@ -393,10 +438,17 @@ hoopShell.addEventListener('pointerup', (event) => {
   if (motionItem) startStitchMotion(motionItem, motionSurface, loosePoints); else render()
 })
 hoopShell.addEventListener('pointercancel', (event) => {
+  if (event.pointerType === 'touch') { touchRotation.up(event.pointerId); cancelNeedleInteraction(); return }
   if (viewPointerId === event.pointerId || stitchPointerId === event.pointerId) cancelNeedleInteraction()
 })
 hoopShell.addEventListener('lostpointercapture', (event) => {
+  if (event.pointerType === 'touch' && viewPointerId === TOUCH_CAMERA_ID && touchRotation.has(event.pointerId)) { cancelNeedleInteraction(); return }
   if (viewPointerId === event.pointerId || stitchPointerId === event.pointerId) cancelNeedleInteraction()
+})
+window.addEventListener('pointerup', (event) => {
+  if (event.pointerType === 'touch' && !hoopShell.contains(event.target as Node) && touchRotation.has(event.pointerId)) {
+    touchRotation.up(event.pointerId); cancelNeedleInteraction()
+  }
 })
 canvas.addEventListener('contextmenu', (event) => { event.preventDefault(); cancelNeedleInteraction() })
 
@@ -442,6 +494,11 @@ window.addEventListener('keydown', (event) => {
     else { resetTransientToNeedle(); announceViewPosition('Needle reset') }
   }
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); cancelNeedleInteraction(); event.shiftKey ? redoButton.click() : undoButton.click() }
+})
+window.addEventListener('keyup', (event) => {
+  if (event.key === 'Shift' && shiftRotation) {
+    cancelNeedleInteraction(); syncViewControl(); announceViewPosition('View adjusted')
+  }
 })
 reducedMotionQuery.addEventListener('change', () => { stopStitchMotion(false); stopViewLoop(); viewController.setReducedMotion(reducedMotionQuery.matches); const currentTarget = target; resetTransientToNeedle(false); if (currentTarget) updateTarget(currentTarget); syncMotionControl(); syncViewControl(); render() })
 window.addEventListener('blur', () => { if (stitchPointerId !== null || viewPointerId !== null) cancelNeedleInteraction(); else stopActiveThreadLoop() })

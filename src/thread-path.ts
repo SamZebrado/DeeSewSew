@@ -25,14 +25,74 @@ export function looseThreadPath(points: readonly NormalizedPoint[]): CubicThread
   result.push(line(start, points.at(-1)!))
   return result
 }
-/** Split the settled cubic exactly, so both endpoint contracts are algebraic identities. */
+const clamp01 = (value: number): number => Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+/** A bounded damped-string-inspired front, not a material-accurate PDE solver.
+ * u=0 is the pulled/new-hole end, u=1 the previous hole. */
+export function tighteningWeight(u: number, progress: number): number {
+  const p = clamp01(progress)
+  if (p === 0 || p === 1) return p
+  const delta = .12
+  const q = -delta + (1 + 2 * delta) * p
+  const x = clamp01((clamp01(u) - (q - delta)) / (2 * delta))
+  return 1 - x * x * (3 - 2 * x)
+}
+
+function arcTable(path: CubicThreadPath, steps: number): number[] {
+  const lengths = [0]
+  let previous = path[0]
+  for (let i = 1; i <= steps; i++) {
+    const point = sampleThreadPath(path, i / steps)
+    lengths.push(lengths[i - 1]! + Math.hypot(point.x - previous.x, point.y - previous.y))
+    previous = point
+  }
+  return lengths
+}
+function arcParameter(lengths: readonly number[], fraction: number): number {
+  const target = fraction * lengths.at(-1)!
+  if (target <= 0) return 0
+  for (let i = 1; i < lengths.length; i++) {
+    if (lengths[i]! >= target) {
+      const span = lengths[i]! - lengths[i - 1]!
+      return (i - 1 + (span > 0 ? (target - lengths[i - 1]!) / span : 0)) / (lengths.length - 1)
+    }
+  }
+  return 1
+}
+/** Exact subcurves at both ends; arc-length-local weights between them.
+ * Fixed subdivision budgets keep active work linear in the small rope size. */
 export function tightenThreadPath(loose: readonly CubicThreadPath[], settled: CubicThreadPath, progress: number): CubicThreadPath[] {
   if (!loose.length) return [settled]
-  const t = Math.min(1, Math.max(0, progress))
+  const p = clamp01(progress)
+  if (p === 0) return [...loose]
+  if (p === 1) return [settled]
+  const spans = loose.flatMap(curve => {
+    const [a, b] = splitThreadPath(curve, .5)
+    return [...splitThreadPath(a, .5), ...splitThreadPath(b, .5)]
+  })
+  const tables = spans.map(curve => arcTable(curve, 6))
+  const total = tables.reduce((sum, table) => sum + table.at(-1)!, 0)
+  const settledLengths = arcTable(settled, 96)
+  // A collapsed source has no usable arc coordinate; use the destination arc.
+  if (total < 1e-12) {
+    const goalLength = settledLengths.at(-1)!
+    return [settled.map((point, i) => interpolate(loose[0]![0], point,
+      tighteningWeight(goalLength > 1e-12 ? 1 - settledLengths[i * 32]! / goalLength : 0, p))) as unknown as CubicThreadPath]
+  }
+  let travelled = 0
+  let previousT = 0
   let rest = settled
-  return loose.map((curve, index) => {
-    const [goal, tail] = splitThreadPath(rest, 1 / (loose.length - index))
+  return spans.map((curve, index) => {
+    const lengths = tables[index]!
+    const endFraction = (travelled + lengths.at(-1)!) / total
+    const nextT = index === spans.length - 1 ? 1 : arcParameter(settledLengths, endFraction)
+    const [goal, tail] = splitThreadPath(rest, previousT < 1 ? (nextT - previousT) / (1 - previousT) : 1)
     rest = tail
-    return curve.map((point, control) => interpolate(point, goal[control]!, t)) as unknown as CubicThreadPath
+    previousT = nextT
+    const result = curve.map((point, control) => {
+      const u = 1 - (travelled + lengths[control * 2]!) / total
+      return interpolate(point, goal[control]!, tighteningWeight(u, p))
+    }) as unknown as CubicThreadPath
+    travelled += lengths.at(-1)!
+    return result
   })
 }
