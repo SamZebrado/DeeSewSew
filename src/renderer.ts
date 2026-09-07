@@ -21,6 +21,7 @@ import { sampleStitchMotionProgress, type StitchMotionSampleV2 } from './stitch-
 import { ThreadCoverage } from './thread-coverage'
 import { looseThreadPath, tightenThreadPath, transportThreadEye, type CubicThreadPath } from './thread-path'
 import { needlePassage, needlePose, type NeedlePose, type NeedlePassage } from './needle-pose'
+import { drawNeedleVisual } from './needle-visual'
 
 export type HoopSide = 'front' | 'back'
 
@@ -741,27 +742,9 @@ export class EmbroideryRenderer {
     ctx.restore()
   }
 
-  private drawPose(ctx: CanvasRenderingContext2D, pose: NeedlePose, shaft: readonly [NormalizedPoint, NormalizedPoint], eyeVisible: boolean, color: string): void {
-    const [a, b] = shaft.map(point => this.point(point)) as [[number, number], [number, number]]
-    const [eyeX, eyeY] = this.point(pose.eye)
-    const [tipX, tipY] = this.point(pose.tip)
-    const scale = this.size / 640
-    ctx.save()
-    ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.4, 2.1 * scale)
-    ctx.shadowColor = 'rgba(45,34,27,.25)'; ctx.shadowBlur = Math.max(1, 3 * scale)
-    const metal = ctx.createLinearGradient(a[0], a[1], b[0] + .01, b[1] + .01)
-    metal.addColorStop(0, '#858c8c'); metal.addColorStop(.5, '#f9ffff'); metal.addColorStop(1, '#858c8c')
-    ctx.strokeStyle = metal; ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke()
-    ctx.shadowColor = 'transparent'
-    if (Math.hypot(a[0] - tipX, a[1] - tipY) < 1e-6) {
-      ctx.fillStyle = '#c3cccc'; ctx.beginPath(); ctx.arc(tipX, tipY, Math.max(.7, scale), 0, Math.PI * 2); ctx.fill()
-    }
-    if (eyeVisible) {
-      const [tailX, tailY] = this.point(pose.tail)
-      ctx.strokeStyle = '#777f7f'; ctx.fillStyle = color; ctx.lineWidth = .7 * scale
-      ctx.beginPath(); ctx.ellipse(eyeX, eyeY, Math.max(1.8, 3 * scale), Math.max(1.1, 1.6 * scale), Math.atan2(tailY - tipY, tailX - tipX), 0, Math.PI * 2); ctx.fill(); ctx.stroke()
-    }
-    ctx.restore()
+  private drawPose(ctx: CanvasRenderingContext2D, pose: NeedlePose, shaft: readonly [NormalizedPoint, NormalizedPoint], eyeVisible: boolean, color: string, focus = 1): void {
+    const project = (point: NormalizedPoint): NormalizedPoint => { const [x, y] = this.point(point); return { x, y } }
+    drawNeedleVisual(ctx, project(pose.tip), project(pose.eye), project(pose.tail), [project(shaft[0]), project(shaft[1])], eyeVisible, color, this.size / 640, focus)
   }
 
   private drawMotion(ctx: CanvasRenderingContext2D, stitch: Stitch, motion: StitchMotion, sample: StitchMotionSampleV2, drawThread: boolean, buildupOverride?: number): void {
@@ -815,7 +798,7 @@ export class EmbroideryRenderer {
       const { sample, destination } = transient.passage
       const shaft = destination ? sample.destinationShaft : sample.sourceShaft
       if (destination && sample.extraThread.length) this.drawActiveThread(ctx, sample.extraThread, color)
-      if (shaft) this.drawPose(ctx, sample.pose, shaft, destination ? sample.destinationEyeVisible : sample.sourceEyeVisible, color)
+      if (shaft) this.drawPose(ctx, sample.pose, shaft, destination ? sample.destinationEyeVisible : sample.sourceEyeVisible, color, sample.focus)
       return
     }
     if (transient?.points && transient.points.length >= 2) {

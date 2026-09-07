@@ -1,6 +1,7 @@
 import type { NeedlePose } from './needle-pose'
 import type { NormalizedPoint } from './stitch-model'
 import { looseThreadPath } from './thread-path'
+import { drawNeedleVisual } from './needle-visual'
 /** Screen-space presentation only. Never receives canonical mutation callbacks. */
 export class FloatingNeedle {
   private canvas = document.createElement('canvas')
@@ -27,12 +28,6 @@ export class FloatingNeedle {
       ctx.stroke()
     }
     const tip = project(pose.tip), tail = project(pose.tail), eye = project(pose.eye)
-    ctx.shadowColor = 'rgba(45,34,27,.25)'; ctx.shadowBlur = 3
-    const metal = ctx.createLinearGradient(tip.x, tip.y, tail.x + .01, tail.y + .01)
-    metal.addColorStop(0, '#858c8c'); metal.addColorStop(.5, '#f9ffff'); metal.addColorStop(1, '#858c8c')
-    ctx.strokeStyle = metal; ctx.lineWidth = Math.max(1.4, 2.1 * size / 640)
-    ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(tail.x, tail.y); ctx.stroke()
-    ctx.shadowColor = 'transparent'; ctx.fillStyle = color
-    ctx.beginPath(); ctx.ellipse(eye.x, eye.y, Math.max(1.8, 3 * size / 640), Math.max(1.1, 1.6 * size / 640), Math.atan2(tail.y - tip.y, tail.x - tip.x), 0, 2 * Math.PI); ctx.fill()
+    drawNeedleVisual(ctx, tip, eye, tail, [tip, tail], true, color, size / 640)
   }
 }

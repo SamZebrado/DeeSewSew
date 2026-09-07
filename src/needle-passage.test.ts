@@ -19,7 +19,7 @@ test('default eye is lower-right; tip, eye and shaft share passage geometry', ()
   expect(emerged.extraThread.at(-1)).toEqual(emerged.pose.eye)
   expect(emerged.pull).toBe(0)
   const final = needlePassage(pose, 1)
-  expect(final.pose).toEqual(needlePose(pose.tip, -Math.PI / 4))
+  expect(final.pose).toEqual(pose)
   expect(final.extraThread.at(-1)).toEqual(final.pose.eye)
 })
 

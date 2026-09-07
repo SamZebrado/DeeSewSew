@@ -17,7 +17,8 @@ import {
 } from './embroidery-topology'
 import { STITCH_MOTION_DURATION_MS, sampleStitchMotion, sampleStitchMotionProgress } from './stitch-motion'
 import { createPieceStorage, downloadRecovery } from './piece-storage'
-import { needlePassage, needlePose, DEFAULT_NEEDLE_ORIENTATION, type NeedlePose } from './needle-pose'
+import { needlePassage, needlePose, type NeedlePose } from './needle-pose'
+import { heldNeedlePose } from './held-needle'
 import {
   activeThreadSag, activeThreadDeflection, createActiveThread, retargetActiveThread, resetActiveThreadClock, snapshotActiveThread, stepActiveThread,
   type ActiveThreadState,
@@ -319,13 +320,13 @@ function ensureActiveThreadLoop(): void {
 function resetTransientToNeedle(redraw = true): void {
   stopActiveThreadLoop()
   target = history.present.needle.position ? { ...history.present.needle.position } : null
-  hoverPose = target ? needlePose(target, history.present.needle.side === 'back' ? -Math.PI / 4 : DEFAULT_NEEDLE_ORIENTATION) : null
+  hoverPose = target ? heldNeedlePose(target, viewController.snapshot(), projectionGeometry()) : null
   activeThread = null
   if (redraw) render()
 }
 function updateTarget(point: NormalizedPoint): void {
   target = { ...point }
-  hoverPose = needlePose(point, history.present.needle.side === 'back' ? -Math.PI / 4 : DEFAULT_NEEDLE_ORIENTATION)
+  hoverPose = heldNeedlePose(point, viewController.snapshot(), projectionGeometry())
   const eye = hoverPose.eye
   const anchor = history.present.needle.position
   if (!anchor || Math.hypot(point.x - anchor.x, point.y - anchor.y) < .0005) {
@@ -338,6 +339,11 @@ function updateTarget(point: NormalizedPoint): void {
   }
   ensureActiveThreadLoop()
   render()
+}
+function refreshHeldPose(): void {
+  if (!target || motion) return
+  hoverPose = heldNeedlePose(target, viewController.snapshot(), projectionGeometry())
+  if (activeThread) activeThread = retargetActiveThread(activeThread, hoverPose.eye)
 }
 function projectionGeometry() {
   const rect = hoopShell.getBoundingClientRect()
@@ -392,6 +398,7 @@ function viewStateName(): string {
 function syncViewControl(): void {
   const view = viewController.snapshot(); const surface = visibleSurface(view); const available = needleAvailable(view); const targeting = targetMode(view)
   hoopRotator.style.transform = `rotateX(${view.pitchDeg.toFixed(3)}deg) rotateY(${view.yawDeg.toFixed(3)}deg)`
+  if (hoopShell.dataset.yaw !== view.yawDeg.toFixed(3) || hoopShell.dataset.pitch !== view.pitchDeg.toFixed(3)) refreshHeldPose()
   hoopShell.dataset.viewState = viewStateName(); hoopShell.dataset.viewMode = view.mode; hoopShell.dataset.alignedFace = view.alignedFace ?? 'none'
   hoopShell.dataset.visibleSide = surface ?? 'edge'; hoopShell.dataset.needleSide = history.present.needle.side; hoopShell.dataset.interactionState = view.interactionState; hoopShell.dataset.needleAvailable = String(available)
   hoopShell.dataset.yaw = view.yawDeg.toFixed(3); hoopShell.dataset.pitch = view.pitchDeg.toFixed(3)
@@ -610,8 +617,8 @@ document.addEventListener('visibilitychange', () => {
     else { stopActiveThreadLoop(); stopStitchMotion(false) }
   } else ensureActiveThreadLoop()
 })
-renderer.onResize = () => { lastFaceInputs.front = null; renderFront() }
-backRenderer.onResize = () => { lastFaceInputs.back = null; renderBack() }
+renderer.onResize = () => { lastFaceInputs.front = null; refreshHeldPose(); renderFront() }
+backRenderer.onResize = () => { lastFaceInputs.back = null; refreshHeldPose(); renderBack() }
 refreshRenderItems(); syncMotionControl(); syncViewControl(); render()
 if (pieceStorage.initial.status === 'loaded') setText(document.querySelector('#save-state')!, 'Loaded from this device')
 if (pieceStorage.initial.status === 'invalid' || pieceStorage.initial.status === 'unavailable') showSaveState(false)
