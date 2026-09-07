@@ -9,7 +9,9 @@ try { storage = localStorage } catch { /* Restricted browser. */ }
 export let locale: Locale = initialLocale(storage, () => navigator.language)
 /** English message IDs are readable at call sites; artwork never contains these IDs. */
 export const messages: Record<string, string> = {
-  'A tiny embroidery studio in your browser': '浏览器里的小小刺绣工作室',
+  'DeeSewSew': '叠绣绣',
+  'DeeSewSew — Tiny browser embroidery studio': '叠绣绣 DeeSewSew — 数字刺绣工作室',
+  'A tiny embroidery studio in your browser.': '浏览器里的小小数字刺绣工作室。',
   'Not saved yet': '尚未保存', 'Download recovery copy': '下载恢复副本', 'Download original stored data': '下载原始存储数据',
   'Embroidery studio': '刺绣工作室', 'Stitch controls': '刺绣工具',
   'Embroidery hoop view. Move the needle, click to puncture, use the rim or arrow keys to rotate, Home for front, and End for back.': '绣盘视图。移动针并点击落针；拖动边框或用方向键旋转，Home 回正面，End 回背面。',
@@ -18,7 +20,7 @@ export const messages: Record<string, string> = {
   'Move the needle; the loose thread follows. Click to puncture, then choose where it emerges.': '移动针，松线随行。点击落针，再选择出针位置。',
   'Hold Shift and drag to rotate · Drag with two fingers to rotate': '按住 Shift 拖动可旋转 · 双指拖动旋转',
   'Thread': '绣线', 'Thread color': '绣线颜色', 'Custom': '自定义', 'Choose a custom thread color': '选择自定义绣线颜色', 'Add color': '添加颜色',
-  'Poppy': '罂粟红', 'Coral': '珊瑚', 'Marigold': '金盏黄', 'Leaf': '叶绿', 'Indigo': '靛蓝', 'Plum': '梅紫', 'Walnut': '胡桃', 'Ink': '墨色', 'Cream': '米白',
+  'Poppy': '茜红', 'Coral': '珊瑚', 'Marigold': '金盏黄', 'Leaf': '叶绿', 'Indigo': '靛蓝', 'Plum': '梅紫', 'Walnut': '胡桃', 'Ink': '墨色', 'Cream': '米白',
   'Stitch routing': '行针方式', 'Stitch type': '针法', 'Running': '平针', 'Back': '回针',
   'View & motion': '视角与动画', 'Auto rotate': '自动旋转', 'Slowly turn from the current angle': '从当前角度缓慢转动',
   'Stitch motion': '行针动画', 'Press, puncture, tighten, and settle': '按压、穿布、收紧、落定', 'Return front': '回到正面', 'Snap back': '转到背面',
@@ -49,11 +51,11 @@ export const messages: Record<string, string> = {
   'Replace the current artwork? Export a copy first if you want to keep it.': '替换当前作品？若要保留，请先导出副本。',
   'Artwork imported': '作品已导入', 'The validated artwork is ready to continue.': '作品已通过校验，可以继续刺绣。',
   'Export failed': '导出失败', 'Could not download this artwork. Your work is unchanged.': '无法下载作品，当前作品未改变。',
-  'Try a leaf': '试试绣一片叶子', 'Exit guide': '退出引导', 'Leaf complete': '叶子已完成',
+  'Stitch a flower': '绣一朵小花', 'Exit guide': '退出引导',
   'Follow the next highlighted point. Existing stitches stay when you exit.': '跟随下一个高亮点落针，退出后已绣线段仍会保留。',
-  'Guide finished. Your leaf is ordinary editable artwork.': '引导已完成，叶子可像普通作品一样编辑。',
+  'Finished. Take a look at the back?': '完成啦。翻到背面看看？',
   'Guide paused': '引导已退出', 'Your stitches remain on the fabric.': '已绣的线段仍保留在布料上。',
-  'Next leaf point': '下一个叶子落针点', 'Follow the highlighted guide point before continuing.': '请先在高亮引导点落针。',
+  'Next flower point': '下一个小花落针点', 'Follow the highlighted guide point before continuing.': '请先在高亮引导点落针。',
 }
 const templates: [string, string][] = [
   ['Custom {value}', '自定义 {value}'], ['Choose {side}-side emergence', '选择{side}出针点'],
@@ -64,7 +66,7 @@ const templates: [string, string][] = [
   ['Choose where the hidden {side}-side needle should emerge; flipping is optional.', '选择隐藏在{side}的针的出针位置，无需翻面。'],
   ['{color} is ready to stitch.', '{color}已就绪。'], ['You can keep up to {count} custom thread colors on this device.', '本机最多可保留 {count} 种自定义绣线颜色。'],
   ['{color} is now in your thread palette.', '{color}已加入绣线色板。'], ['{routing} routing will shape the next surface segment.', '下一段表面绣线将使用{routing}。'],
-  ['Needle restored to the {side}.', '针已恢复到{side}。'], ['Needle is on the {side}.', '针在{side}。'], ['Leaf step {step} of {total}', '叶子第 {step} / {total} 步'],
+  ['Needle restored to the {side}.', '针已恢复到{side}。'], ['Needle is on the {side}.', '针在{side}。'], ['Flower step {step} of {total}', '小花第 {step} / {total} 步'],
 ]
 const compiled = templates.map(([source, target]) => {
   const keys: string[] = []

@@ -18,7 +18,7 @@ export function heldNeedlePose(tip: NormalizedPoint, view: FabricViewAngles, geo
     const distance = Math.hypot(x, y, radius * .3)
     // An eye directly above the target otherwise admits two opposite leaning
     // solutions. Retain an upward floor there rather than choosing either branch.
-    const angle = Math.atan2(x / distance, Math.max(.65, 1.1 - y / distance))
+    const angle = Math.atan2(x / distance, Math.max(.65, 1.45 - y / distance))
     const bounded = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, angle))
     dx = Math.sin(bounded); dy = -Math.cos(bounded)
   }

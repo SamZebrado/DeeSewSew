@@ -1,6 +1,7 @@
 import './style.css'
 import { localize, locale, setText, switchLocale, t } from './i18n'
-import { LEAF, guideStep, loadGuide, nearGuideTarget, saveGuide, type GuideSession } from './leaf-guide'
+import { guideTargets, startGuide, guideStep, loadGuide, nearGuideTarget, saveGuide, type GuideSession } from './leaf-guide'
+import { FLOWER } from './flower-pattern'
 import { TouchRotation } from './touch-rotation'
 import { EmbroideryRenderer, type StitchMotion, type TransientThreadVisual } from './renderer'
 import { FABRIC_RADIUS, type NormalizedPoint, type Stitch, type StitchType } from './stitch-model'
@@ -37,7 +38,7 @@ const depthRings = [-9, -6, -3, 0, 3, 6, 9].map((depth) => `<i class="hoop-depth
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <main class="studio">
-    <header class="masthead"><div><p class="eyebrow">A tiny embroidery studio in your browser</p><h1>DeeSewSew</h1></div><div><p class="save-state" id="save-state" aria-live="polite">Not saved yet</p><button id="recovery-copy" type="button" hidden>Download recovery copy</button><button id="recovery-source" type="button" hidden>Download original stored data</button></div></header>
+    <header class="masthead"><div><p class="eyebrow">A tiny embroidery studio in your browser.</p><h1>DeeSewSew</h1></div><div><p class="save-state" id="save-state" aria-live="polite">Not saved yet</p><button id="recovery-copy" type="button" hidden>Download recovery copy</button><button id="recovery-source" type="button" hidden>Download original stored data</button></div></header>
     <section class="workspace" aria-label="Embroidery studio">
       <div class="hoop-stage">
         <div class="hoop-shell" id="hoop-shell" data-view-state="front" data-view-mode="manual" data-needle-side="front" role="group" tabindex="0" aria-label="Embroidery hoop view. Move the needle, click to puncture, use the rim or arrow keys to rotate, Home for front, and End for back.">
@@ -59,13 +60,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button class="mode-control" id="motion-toggle" type="button" aria-pressed="${settings.motionEnabled && !reducedMotionQuery.matches}"><span class="mode-icon needle-icon" aria-hidden="true">⌁</span><span class="mode-copy"><strong>Stitch motion</strong><small>Press, puncture, tighten, and settle</small></span><span class="switch-track" aria-hidden="true"><span></span></span></button>
         </div><div class="view-actions"><button class="soft-button" id="view-front" type="button">Return front</button><button class="soft-button" id="view-back" type="button">Snap back</button></div></section>
         <section class="tool-group history-group"><h2>Edit</h2><div class="edit-row"><button class="soft-button" id="undo" type="button" disabled aria-label="Undo last puncture">↶ <span>Undo</span></button><button class="soft-button" id="redo" type="button" disabled aria-label="Redo last puncture">↷ <span>Redo</span></button></div><button class="clear-button" id="clear" type="button" disabled>Clear fabric</button></section>
-        <section class="tool-group"><h2>Artwork</h2><div class="edit-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><button class="soft-button" id="leaf-guide" type="button">Try a leaf</button><p id="guide-copy" hidden></p></section>
+        <section class="tool-group"><h2>Artwork</h2><div class="edit-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><button class="soft-button" id="leaf-guide" type="button">Stitch a flower</button><p id="guide-copy" hidden></p></section>
         <div class="quiet-tip" role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true">✦</span><p><strong id="status-title">Needle ready</strong><br><span id="status-copy">Move the front-side needle, then click to puncture.</span></p></div>
       </aside>
     </section>
   </main>`
 
 localize(document.querySelector('#app')!)
+setText(document.querySelector('title')!, 'DeeSewSew — Tiny browser embroidery studio')
 document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en'
 const languageButton = document.createElement('button')
 languageButton.id = 'language-toggle'; languageButton.type = 'button'
@@ -135,16 +137,17 @@ function refreshGuide(): void {
   const step = guide ? guideStep(history.present, guide) : null
   if (guide && step === null) { guide = null; saveGuide(null) }
   guideIndex = step ?? 0
-  const guided = Boolean(guide && guideIndex < LEAF.targets.length)
+  const total = guide ? guideTargets(guide).length : 0
+  const guided = Boolean(guide && guideIndex < total)
   palette.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = guided })
   customColorInput.disabled = guided; addColorButton.disabled = guided
-  setText(guideButton, guide ? 'Exit guide' : 'Try a leaf')
+  setText(guideButton, guide ? 'Exit guide' : FLOWER.entry)
   guideCopy.hidden = !guide
-  if (guide) setText(guideCopy, guideIndex === LEAF.targets.length ? 'Guide finished. Your leaf is ordinary editable artwork.' : `Leaf step ${guideIndex + 1} of ${LEAF.targets.length}`)
+  if (guide) setText(guideCopy, guideIndex === total ? FLOWER.completion : `Flower step ${guideIndex + 1} of ${total}`)
 }
 guideButton.addEventListener('click', () => {
   if (guide) { guide = null; announce('Guide paused', 'Your stitches remain on the fabric.') }
-  else { guide = { version: 1, startOrder: history.present.nextOrder, side: history.present.needle.side, color }; announce('Try a leaf', 'Follow the next highlighted point. Existing stitches stay when you exit.') }
+  else { guide = startGuide(history.present, color); announce(FLOWER.entry, 'Follow the next highlighted point. Existing stitches stay when you exit.') }
   saveGuide(guide); refreshGuide(); render()
 })
 
@@ -189,7 +192,7 @@ function updateHistoryControls(): void {
   redoButton.disabled = history.future.length === 0
 }
 function render(): void {
-  const nextGuide = guide ? LEAF.targets[guideIndex] : undefined
+  const nextGuide = guide ? guideTargets(guide)[guideIndex] : undefined
   guideMarker.hidden = !nextGuide || !targetMode()
   if (nextGuide && !guideMarker.hidden) {
     const geometry = projectionGeometry(), p = projectFabricPoint(nextGuide, viewController.snapshot(), geometry)
@@ -527,8 +530,8 @@ hoopShell.addEventListener('pointerup', (event) => {
   if (stitchPointerId !== event.pointerId) return
   stitchPointerId = null; releaseHoopPointer(event.pointerId); const point = pointerPoint(event)
   if (!point) { resetTransientToNeedle(); return }
-  const guideTarget = guide ? LEAF.targets[guideIndex] : undefined
-  if (guideTarget && !nearGuideTarget(point, guideTarget)) { announce('Next leaf point', 'Follow the highlighted guide point before continuing.'); return }
+  const guideTarget = guide ? guideTargets(guide)[guideIndex] : undefined
+  if (guideTarget && !nearGuideTarget(point, guideTarget)) { announce('Next flower point', 'Follow the highlighted guide point before continuing.'); return }
   const previousPosition = history.present.needle.position
   if (previousPosition && Math.hypot(point.x - previousPosition.x, point.y - previousPosition.y) < .018) { announce('A little farther', 'Move the needle tip before puncturing again.'); return }
   if (!canPuncture(history.present)) { resetTransientToNeedle(false); announce('Fabric full', 'This piece has reached its local segment limit. Undo or clear before adding more.'); render(); return }

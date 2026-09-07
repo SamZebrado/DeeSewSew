@@ -8,9 +8,14 @@ export function drawNeedleVisual(ctx: CanvasRenderingContext2D, tip: Point, eye:
   ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.4, 2.1 * scale)
   ctx.shadowColor = 'rgba(45,34,27,.25)'; ctx.shadowBlur = Math.max(1, 3 * scale)
   const metal = ctx.createLinearGradient(a.x, a.y, b.x + .01, b.y + .01)
-  metal.addColorStop(0, '#858c8c'); metal.addColorStop(.5, '#f9ffff'); metal.addColorStop(1, '#858c8c')
+  metal.addColorStop(0, '#a5afb2'); metal.addColorStop(.22, '#e4edef'); metal.addColorStop(.46, '#ffffff'); metal.addColorStop(.64, '#b6c1c5'); metal.addColorStop(1, '#879296')
   ctx.strokeStyle = metal; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
   ctx.shadowColor = 'transparent'
+  // A subpixel specular core retains the darker metal edge. The physical shaft
+  // and its clipping remain unchanged; this is not a wider white silhouette.
+  ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = Math.max(.45, .65 * scale)
+  ctx.beginPath(); ctx.moveTo(a.x + (b.x - a.x) * .12, a.y + (b.y - a.y) * .12)
+  ctx.lineTo(a.x + (b.x - a.x) * .72, a.y + (b.y - a.y) * .72); ctx.stroke()
   if (eyeVisible) {
     ctx.strokeStyle = '#929b9b'; ctx.fillStyle = color; ctx.lineWidth = .7 * scale
     ctx.beginPath(); ctx.ellipse(eye.x, eye.y, Math.max(1.3, 1.9 * scale), Math.max(.7, 1 * scale), Math.atan2(tail.y - tip.y, tail.x - tip.x), 0, Math.PI * 2); ctx.fill(); ctx.stroke()

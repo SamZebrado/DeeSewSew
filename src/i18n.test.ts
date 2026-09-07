@@ -11,6 +11,8 @@ test('locale fallback and manual override are independent of artwork storage', (
 test('catalog translates dynamic semantic values without persisting translated topology', () => {
   expect(t('Choose back-side emergence', 'zh')).toBe('选择背面出针点')
   expect(t('Needle restored to the front.', 'zh')).toBe('针已恢复到正面。')
-  expect(t('Leaf step 2 of 20', 'zh')).toBe('叶子第 2 / 20 步')
+  expect(t('Flower step 2 of 41', 'zh')).toBe('小花第 2 / 41 步')
+  expect(t('DeeSewSew', 'zh')).toBe('叠绣绣')
+  expect(t('Poppy', 'zh')).toBe('茜红')
   for (const key of Object.keys(messages)) { expect(t(key, 'en')).toBe(key); expect(t(key, 'zh')).not.toBe(key) }
 })

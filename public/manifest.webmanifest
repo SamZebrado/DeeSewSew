@@ -1,6 +1,6 @@
 {
-  "name": "DeeSewSew",
-  "short_name": "DeeSewSew",
+  "name": "叠绣绣 DeeSewSew",
+  "short_name": "叠绣绣",
   "description": "A tiny embroidery studio in your browser.",
   "start_url": "/DeeSewSew/",
   "scope": "/DeeSewSew/",

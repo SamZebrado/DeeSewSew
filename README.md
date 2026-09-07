@@ -1,7 +1,10 @@
-# DeeSewSew
+# 叠绣绣 DeeSewSew
 
-浏览器里的小小刺绣工作室：移动穿着线的针，慢慢绣出自己的作品。
-A tiny embroidery studio in your browser: move a threaded needle and make something at your own pace.
+浏览器里的小小数字刺绣工作室。
+A tiny embroidery studio in your browser.
+
+移动穿着线的针，慢慢绣出自己的作品。
+Move a threaded needle and make something at your own pace.
 
 ## 当前功能 / Features
 
@@ -11,8 +14,8 @@ A tiny embroidery studio in your browser: move a threaded needle and make someth
   Loose thread follows with sag and inertia; the tip enters first, the eye carries thread through, and tension travels from the new hole toward the old hole.
 - 可停在任意角度的绣盘旋转、可关闭的行针动画和自定义颜色。
   Rotation that stops at any angle, optional stitch animation, and custom colors.
-- 简体中文／英文、本机保存、撤销／重做、JSON 导入导出和可选单色叶子引导。
-  Simplified Chinese/English, local saving, undo/redo, JSON import/export, and an optional monochrome leaf guide.
+- 简体中文／英文、本机保存、撤销／重做、JSON 导入导出和可选单色小花引导。
+  Simplified Chinese/English, local saving, undo/redo, JSON import/export, and an optional monochrome flower guide.
 
 作品不上传到服务器。本机存储不可用时仍可导出当前内存中的作品。
 Artwork is not uploaded. If local storage is unavailable, the current in-memory artwork can still be exported.
@@ -35,10 +38,13 @@ Artwork is not uploaded. If local storage is unavailable, the current in-memory 
 导出下载包含规范拓扑的版本化 JSON。导入先校验整个文件，再确认替换非空作品；错误文件不会清空当前作品。浏览器存储不是永久备份，请保留导出副本。
 Export downloads versioned JSON with canonical topology. Import validates the whole file before confirming replacement of nonempty work; invalid files do not clear the current piece. Browser storage is not a permanent archive: keep exported backups.
 
-## 叶子引导 / Leaf guide
+## 小花引导 / Flower guide
 
-默认自由刺绣。点击“试试绣一片叶子”，按下一个高亮点落针。引导使用真实针线逻辑，不凭空添加首段线；使用一种选定颜色。撤销回退进度，退出后线段保留为普通作品。
-Free stitching is the default. Choose “Try a leaf” and follow the next highlighted point. It uses the real needle/thread model, never invents a first segment, and keeps one selected color. Undo rewinds progress; exiting keeps ordinary editable stitches.
+默认自由刺绣。点击“绣一朵小花”，按下一个高亮点落针，在正面绣出四瓣小花。空白作品需 41 次落针；从背面持针开始则为 40 次。引导使用真实针线逻辑和一种选定颜色，不凭空添加首段线。撤销回退进度，刷新继续，退出后线段保留为普通作品。
+Free stitching is the default. Choose “Stitch a flower” and follow the next highlighted point to make a four-petal flower on the front. A blank piece takes 41 punctures, or 40 when starting with the needle on the back. It uses the real needle/thread model and one selected color, never inventing a first segment. Undo rewinds progress, reload resumes, and exiting keeps ordinary editable stitches.
+
+背面是诚实的针线连接，不是爱心图案。完成后可主动翻面看看，不会强制旋转。已有作品会保留，包括旧针孔到新图案的真实连接；想要独立的小花，可先导出旧作品，再清空布料。
+The back contains honest thread routing, not a heart motif. Completion invites you to inspect it without forcing a flip. Existing artwork is retained, including the real connection from the old hole to the new pattern. For a standalone flower, export your previous work before clearing the fabric.
 
 ## 本地开发 / Development
 
@@ -61,8 +67,8 @@ The development URL is usually `http://127.0.0.1:5173/DeeSewSew/`; production ou
 
 ## GitHub Pages
 
-静态 PWA 的资源及离线缓存范围为 `/DeeSewSew/`。本地候选不代表公开发布；发布须经过指定审查、真人体验和独立的精确提交授权。
-The static PWA uses `/DeeSewSew/` for assets and offline scope. A local candidate is not a public release: publication requires designated review, human testing, and separate approval of the exact commit.
+静态 PWA 的资源及离线缓存范围为 `/DeeSewSew/`。本地候选不代表公开发布；发布须经过测试、指定审查和精确提交授权，并验证线上部署。
+The static PWA uses `/DeeSewSew/` for assets and offline scope. A local candidate is not a public release: publication requires tests, designated review, exact-commit authorization, and deployment verification.
 
 ## 当前限制与证据边界 / Limitations & evidence
 

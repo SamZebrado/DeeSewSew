@@ -25,6 +25,11 @@ for (const side of ['front', 'back'] as const) test(`held cursor ${side}: four q
     await page.screenshot({ path: info.outputPath(`${side}-${name}-detail.png`), clip: { x: px + scroll.x - 70, y: py + scroll.y - 25, width: 140, height: 120 } })
   }
   expect(Math.max(...angles) - Math.min(...angles)).toBeGreaterThan(.3)
+  for (const [name, px, py] of [['center', .5, .5], ['near-edge', .84, .5]] as const) {
+    await page.mouse.move(box.x + box.width * px, box.y + box.height * py, { steps: 16 })
+    await page.waitForTimeout(250)
+    await page.screenshot({ path: info.outputPath(`${side}-${name}.png`) })
+  }
   await page.mouse.move(box.x + box.width + 24, box.y + box.height * .45, { steps: 12 })
   await expect(page.locator('#floating-needle')).toBeVisible()
   await page.screenshot({ path: info.outputPath(`${side}-outside.png`) })
