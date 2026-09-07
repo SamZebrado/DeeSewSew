@@ -18,3 +18,12 @@ Plan before repair:
 
 The original d4b07dd application review and browser evidence remain applicable only
 to byte-identical application/test source; this document does not claim a CI PASS.
+
+## Clean-cache recording dependency
+
+A second clean-runner check reproduced missing Playwright-managed FFmpeg when
+creating a recording page under an empty browser cache. The previous published
+tests did not record video; the newer evidence tests do. Plan: explicitly install
+only `ffmpeg` after npm ci, then verify an actual recording in the isolated cache.
+Keep the existing Chrome channel, every video test, and all application code intact.
+This avoids relying on a developer's pre-existing Playwright cache.

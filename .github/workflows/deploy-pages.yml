@@ -29,6 +29,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx playwright install ffmpeg
       - run: npm test
       - run: npm run test:e2e
       - run: npm run evidence:check
