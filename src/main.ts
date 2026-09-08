@@ -8,6 +8,7 @@ import { TULIP_HEART_PATTERN } from './tulip-heart-pattern'
 import { loadTulipGuide, saveTulipGuide, startTulipGuide, tulipGuideAction } from './tulip-heart-guide'
 import { TouchRotation } from './touch-rotation'
 import { EmbroideryRenderer, type StitchMotion, type TransientThreadVisual } from './renderer'
+import { STUDIO_LIGHTING_OPTIONS, applyStudioLighting, selectStudioLighting, studioLightingId } from './studio-lighting'
 import { FABRIC_RADIUS, type NormalizedPoint, type Stitch, type StitchType } from './stitch-model'
 import { makeVisualScene } from './visual-scenes'
 import { MAX_CUSTOM_COLORS, addCustomColor, loadSettings, normalizeHexColor, saveSettings as writeSettings, type StudioSettings } from './settings'
@@ -66,6 +67,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
           <button class="mode-control" id="rotate-view" type="button" aria-pressed="false" aria-controls="hoop-rotator"><span class="mode-icon" aria-hidden="true">↻</span><span class="mode-copy"><strong id="rotation-title">Auto rotate</strong><small id="rotation-copy">Slowly turn from the current angle</small></span><span class="switch-track" aria-hidden="true"><span></span></span></button>
           <button class="mode-control" id="motion-toggle" type="button" aria-pressed="${settings.motionEnabled && !reducedMotionQuery.matches}"><span class="mode-icon needle-icon" aria-hidden="true">⌁</span><span class="mode-copy"><strong>Stitch motion</strong><small>Press, puncture, tighten, and settle</small></span><span class="switch-track" aria-hidden="true"><span></span></span></button>
         </div><div class="view-actions"><button class="soft-button" id="view-front" type="button">Return front</button><button class="soft-button" id="view-back" type="button">Snap back</button></div></section>
+        <details class="tool-group lighting-options"><summary>Appearance</summary><label for="studio-lighting">Lighting</label><select id="studio-lighting" aria-describedby="lighting-help">${STUDIO_LIGHTING_OPTIONS.map(option => `<option value="${option.id}"${option.id === studioLightingId(settings.lightingId) ? ' selected' : ''}>${option.label}</option>`).join('')}</select><p id="lighting-help">Local lighting only; your stitches stay unchanged.</p></details>
         <section class="tool-group history-group"><h2>Edit</h2><div class="edit-row"><button class="soft-button" id="undo" type="button" disabled aria-label="Undo last puncture">↶ <span>Undo</span></button><button class="soft-button" id="redo" type="button" disabled aria-label="Redo last puncture">↷ <span>Redo</span></button></div><button class="clear-button" id="clear" type="button" disabled>Clear fabric</button></section>
         <section class="tool-group"><h2>Artwork</h2><div class="edit-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><button class="soft-button" id="leaf-guide" type="button">Stitch a flower</button><p id="guide-copy" hidden></p></section>
         <div class="quiet-tip" role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true">✦</span><p><strong id="status-title">Needle ready</strong><br><span id="status-copy">Move the front-side needle, then click to puncture.</span></p></div>
@@ -83,8 +85,8 @@ document.querySelector('.masthead > div:last-child')!.prepend(languageButton)
 languageButton.addEventListener('click', () => { switchLocale(); languageButton.textContent = locale === 'zh' ? 'English' : '中文' })
 const canvas = document.querySelector<HTMLCanvasElement>('#embroidery')!
 const backCanvas = document.querySelector<HTMLCanvasElement>('#embroidery-back')!
-const renderer = new EmbroideryRenderer(canvas, 'front')
-const backRenderer = new EmbroideryRenderer(backCanvas, 'back')
+const renderer = new EmbroideryRenderer(canvas, 'front', { lighting: studioLightingId(settings.lightingId) })
+const backRenderer = new EmbroideryRenderer(backCanvas, 'back', { lighting: studioLightingId(settings.lightingId) })
 const pieceStorage = createPieceStorage()
 let piece = pieceStorage.initial.piece
 const scene = import.meta.env.DEV ? makeVisualScene(new URLSearchParams(location.search).get('scene') ?? '') : null
@@ -136,6 +138,7 @@ const rotateButton = document.querySelector<HTMLButtonElement>('#rotate-view')!
 const frontButton = document.querySelector<HTMLButtonElement>('#view-front')!
 const backButton = document.querySelector<HTMLButtonElement>('#view-back')!
 const motionButton = document.querySelector<HTMLButtonElement>('#motion-toggle')!
+const lightingSelect = document.querySelector<HTMLSelectElement>('#studio-lighting')!
 const undoButton = document.querySelector<HTMLButtonElement>('#undo')!
 const redoButton = document.querySelector<HTMLButtonElement>('#redo')!
 const clearButton = document.querySelector<HTMLButtonElement>('#clear')!
@@ -292,7 +295,7 @@ function saveSettings(value: StudioSettings): void {
     warning.setAttribute('role', 'status')
     document.querySelector('.masthead')!.append(warning)
   }
-  setText(warning, saved ? '' : 'Palette and motion settings are temporary; device storage failed.')
+  setText(warning, saved ? '' : 'Studio settings are temporary; device storage failed.')
 }
 function persist(validatedRaw?:string): void {
   piece = history.present
@@ -704,6 +707,14 @@ function cutCurrentThread():void {
   restoreActiveColor(); resetTransientToNeedle(false); refreshRenderItems(); persist(validatedRaw); syncViewControl(); render()
   announce('Thread ended', 'The next puncture starts a separate thread. Existing stitches stay unchanged.')
 }
+lightingSelect.addEventListener('change', () => {
+  const id = studioLightingId(lightingSelect.value)
+  lightingSelect.value = id
+  const nextSettings = selectStudioLighting(settings, id)
+  const changed = applyStudioLighting(id, renderer, backRenderer)
+  if (nextSettings !== settings) { settings = nextSettings; saveSettings(settings) }
+  if (changed) { lastFaceInputs.front = null; lastFaceInputs.back = null; render() }
+})
 endThreadButton.addEventListener('click', cutCurrentThread)
 clearButton.addEventListener('click', () => {
   cancelNeedleInteraction()

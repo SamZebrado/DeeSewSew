@@ -60,6 +60,12 @@ h1 { margin:0; font-family:Georgia,"Times New Roman",serif; font-size:clamp(38px
 
 .tools { background:var(--surface); border:1px solid var(--line); border-radius:17px; padding:8px 20px 18px; box-shadow:0 12px 32px rgba(55,65,59,.07); }
 .tool-group { padding:16px 0; border-bottom:1px solid var(--line); }
+.lighting-options.tool-group { padding:4px 0; }
+.lighting-options summary { min-height:44px; align-content:center; cursor:pointer; color:var(--ink-soft); font-size:12px; font-weight:750; }
+.lighting-options label { display:block; margin:8px 0; color:var(--ink-soft); font-size:12px; }
+.lighting-options select { box-sizing:border-box; width:100%; min-width:0; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:var(--control-radius); background:var(--surface-muted); color:var(--ink); font:inherit; }
+.lighting-options p { margin:8px 0 0; color:var(--ink-soft); font-size:12px; }
+.lighting-options summary:focus-visible,.lighting-options select:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
 .tool-heading { display:flex; justify-content:space-between; align-items:baseline; }
 .tool-heading span { color:var(--ink-soft); font-size:12px; }
 h2 { margin:0 0 12px; font-size:12px; text-transform:uppercase; letter-spacing:.12em; font-weight:750; color:var(--ink-soft); }
