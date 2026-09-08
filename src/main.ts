@@ -684,7 +684,7 @@ motionButton.addEventListener('click', () => {
   announce(settings.motionEnabled ? 'Stitch motion on' : 'Stitch motion off', settings.motionEnabled ? 'Punctures tighten from the loose thread you are moving.' : 'Live thread following remains; punctures settle immediately.')
 })
 function restoreActiveColor():void{
-  const run=activeThreadRun(runHistory.present),value=run?.color??(run?history.present.punctures.at(-1)?.color:null)
+  const run=activeThreadRun(runHistory.present),value=run?.color??(run?history.present.punctures.at(-1)?.color:tulipGuide?TULIP_HEART_PATTERN.runs[0]!.color:null)
   if(value){if(!palette.querySelector(`.swatch[data-color="${value}"]`))appendCustomSwatch(value);selectColor(value,false)}
 }
 undoButton.addEventListener('click', () => { cancelNeedleInteraction(false); syncThreadHistory(undoThreadHistory(runHistory)); restoreActiveColor(); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Operation undone', `Needle restored to the ${history.present.needle.side}.`) })
@@ -692,7 +692,7 @@ redoButton.addEventListener('click', () => { cancelNeedleInteraction(false); syn
 function cutCurrentThread():void {
   if (endThreadButton.disabled) return
   cancelNeedleInteraction(false); stopStitchMotion(false); syncThreadHistory(endHistoryThread(runHistory))
-  resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render()
+  restoreActiveColor(); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render()
   announce('Thread ended', 'The next puncture starts a separate thread. Existing stitches stay unchanged.')
 }
 endThreadButton.addEventListener('click', cutCurrentThread)

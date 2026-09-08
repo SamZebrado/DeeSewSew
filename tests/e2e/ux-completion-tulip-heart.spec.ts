@@ -17,7 +17,7 @@ test('actual start/puncture/cut guide creates exact independent tulip and heart 
     }
     await expect(page.locator('#guide-copy')).toHaveText('Cut thread to continue')
     await page.locator('#end-thread').click()
-    if(i===2){await page.locator('#undo').click();await expect(page.locator('#guide-copy')).toHaveText('Cut thread to continue');await page.locator('#redo').click();await page.reload()}
+    if(i===2){await page.locator('#undo').click();await expect(page.locator('#guide-copy')).toHaveText('Cut thread to continue');await page.locator('#redo').click();await page.reload();await expect(page.locator('#palette .swatch.selected')).toHaveAttribute('data-color',run.color)}
   }
   await expect(page.locator('#guide-copy')).toHaveText('Tulip and heart complete')
   const piece=await page.evaluate(()=>JSON.parse(localStorage.getItem('deesewsew-piece-v1')!))
