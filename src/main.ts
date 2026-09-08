@@ -17,7 +17,7 @@ import {
   canPuncture, createTopologyHistory,
   migrateLegacyPiece, type SurfaceSide,
 } from './embroidery-topology'
-import { activeThreadRun, adoptThreadRuns, emptyThreadRuns, punctureThreadRun } from './thread-runs'
+import { activeThreadRun, adoptThreadRuns, emptyThreadRuns, punctureThreadRun, type ThreadRunState } from './thread-runs'
 import { createThreadHistory, commitThreadState, endHistoryThread, undoThreadHistory, redoThreadHistory, type ThreadRunHistory } from './thread-run-history'
 import { parseThreadArtwork, serializeThreadArtwork } from './thread-run-storage'
 import { createThreadPieceStorage as createPieceStorage } from './thread-piece-storage'
@@ -480,8 +480,11 @@ function selectColor(nextColor: string, endPrevious = true): void {
   const run = activeThreadRun(runHistory.present)
   if (endPrevious && run && normalized !== (run.color ?? history.present.punctures.at(-1)?.color)) {
     if(history.present.nextOrder>=999_999_999){announce('Fabric full','This piece has reached its local segment limit. Undo or clear before adding more.');return}
+    let nextHistory:ThreadRunHistory, validatedRaw:string
+    try { nextHistory=endHistoryThread(runHistory); validatedRaw=serializeThreadArtwork(nextHistory.present) }
+    catch { announce('Fabric full','This piece has reached its local segment limit. Undo or clear before adding more.');return }
     cancelNeedleInteraction(false); stopStitchMotion(false)
-    syncThreadHistory(endHistoryThread(runHistory)); resetTransientToNeedle(false); refreshRenderItems(); persist()
+    syncThreadHistory(nextHistory); resetTransientToNeedle(false); refreshRenderItems(); persist(validatedRaw)
     announce('New thread color', 'The previous thread ended. The next puncture starts a separate thread.')
   }
   palette.querySelectorAll<HTMLElement>('.swatch').forEach((item) => { item.classList.remove('selected'); item.setAttribute('aria-checked', 'false') })
@@ -627,11 +630,13 @@ hoopShell.addEventListener('pointerup', (event) => {
   updateTarget(point)
   const loosePoints = snapshotActiveThread(activeThread)
   stopActiveThreadLoop()
-  const nextState = tulipAction && 'target' in tulipAction ? punctureGuideStep(runHistory.present,TULIP_HEART_PATTERN,tulipAction.index,point,'running')
+  let nextState:ThreadRunState, validatedRaw:string
+  try {
+    nextState = tulipAction && 'target' in tulipAction ? punctureGuideStep(runHistory.present,TULIP_HEART_PATTERN,tulipAction.index,point,'running')
     : guide && guideTarget ? punctureGuideStep(runHistory.present,guidePattern(guide),guideIndex,point,stitchType)
     : punctureThreadRun(runHistory.present, point, { type: stitchType, color })
-  let validatedRaw:string
-  try { validatedRaw=serializeThreadArtwork(nextState) }
+    validatedRaw=serializeThreadArtwork(nextState)
+  }
   catch { resetTransientToNeedle(false);announce('Fabric full','This piece has reached its local segment limit. Undo or clear before adding more.');render();return }
   const puncture = nextState.topology.punctures.at(-1)!
   const lastSegment = nextState.topology.segments.at(-1)
@@ -691,8 +696,11 @@ undoButton.addEventListener('click', () => { cancelNeedleInteraction(false); syn
 redoButton.addEventListener('click', () => { cancelNeedleInteraction(false); syncThreadHistory(redoThreadHistory(runHistory)); restoreActiveColor(); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Operation restored', `Needle is on the ${history.present.needle.side}.`) })
 function cutCurrentThread():void {
   if (endThreadButton.disabled) return
-  cancelNeedleInteraction(false); stopStitchMotion(false); syncThreadHistory(endHistoryThread(runHistory))
-  restoreActiveColor(); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render()
+  let nextHistory:ThreadRunHistory, validatedRaw:string
+  try { nextHistory=endHistoryThread(runHistory); validatedRaw=serializeThreadArtwork(nextHistory.present) }
+  catch { announce('Fabric full','This piece has reached its local segment limit. Undo or clear before adding more.');return }
+  cancelNeedleInteraction(false); stopStitchMotion(false); syncThreadHistory(nextHistory)
+  restoreActiveColor(); resetTransientToNeedle(false); refreshRenderItems(); persist(validatedRaw); syncViewControl(); render()
   announce('Thread ended', 'The next puncture starts a separate thread. Existing stitches stay unchanged.')
 }
 endThreadButton.addEventListener('click', cutCurrentThread)
