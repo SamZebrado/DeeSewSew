@@ -431,6 +431,24 @@ export function parseArtworkFile(raw: string): EmbroideryPieceV3 {
   return piece
 }
 
+/** Internal v4 fragment boundary, not a replacement for public file import.
+ * A small, legacy-free fragment cannot approach the compatibility serialization
+ * budget: at most 64 punctures + 63 segments + 63 compatibility stitches, each
+ * with bounded IDs, numeric coordinates and fixed-width metadata (<4096 chars
+ * per record), including one continuation. Larger/legacy fragments retain the
+ * exact established file-boundary checks. All canonical checks still use parseV3.
+ */
+export function parseCanonicalThreadFragment(raw: string): EmbroideryPieceV3 {
+  if (!raw || raw.length > MAX_PIECE_STORAGE_CHARACTERS) throw new RangeError('Artwork size limit')
+  const source = JSON.parse(raw)
+  if (source?.schemaVersion !== 3 || !Array.isArray(source.punctures)
+    || source.punctures.length > 64 || !Array.isArray(source.legacyFrontStitches)
+    || source.legacyFrontStitches.length !== 0) return parseArtworkFile(raw)
+  const piece = parseV3(raw)
+  if (!piece || piece.nextOrder >= MAX_ORDER) throw new TypeError('Invalid artwork')
+  return piece
+}
+
 export function loadEmbroideryPiece(): EmbroideryPieceV3 {
   return readEmbroideryPiece().piece
 }

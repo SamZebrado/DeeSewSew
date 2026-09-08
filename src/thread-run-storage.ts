@@ -1,4 +1,4 @@
-import { parseArtworkFile as parseLegacy, type EmbroideryPieceV3, type PunctureEventV3, type SurfaceThreadSegmentV3 } from './embroidery-topology'
+import { parseArtworkFile as parseLegacy, parseCanonicalThreadFragment, type EmbroideryPieceV3, type PunctureEventV3, type SurfaceThreadSegmentV3 } from './embroidery-topology'
 import { MAX_PIECE_STORAGE_CHARACTERS, MAX_STITCHES_PER_PIECE } from './stitch-model'
 import { adoptThreadRuns, type ThreadRun, type ThreadRunState } from './thread-runs'
 
@@ -56,7 +56,7 @@ export function parseThreadArtwork(raw: string): ThreadRunState {
     const normalizedS = ss.map(s => ({ ...s, side: mirror ? flip(s.side) : s.side }))
     const last = normalizedP.at(-1)!
     // No alternate renderer: this validates the same puncture/segment semantics.
-    const checked = parseLegacy(JSON.stringify({ schemaVersion: 3, nextOrder: source.nextOrder,
+    const checked = parseCanonicalThreadFragment(JSON.stringify({ schemaVersion: 3, nextOrder: source.nextOrder,
       punctures: normalizedP, segments: normalizedS, legacyFrontStitches: [],
       needle: { side: last.toSide, position: last.position, lastPunctureId: last.id } }))
     canonicalP.push(...checked.punctures.map(p => ({...p, fromSide: mirror ? flip(p.fromSide) : p.fromSide, toSide: mirror ? flip(p.toSide) : p.toSide})))
@@ -81,7 +81,7 @@ export function parseThreadArtwork(raw: string): ThreadRunState {
   if (ownedP.size !== punctures.length || ownedS.size !== segments.length
     || source.activeRunId !== (runs.at(-1)?.endOrder === null ? runs.at(-1)!.id : null)
     || source.nextOrder <= previousOrder) throw new TypeError('Unowned artwork or active run mismatch')
-  const legacy = parseLegacy(JSON.stringify({ schemaVersion: 3, nextOrder: source.nextOrder, punctures: [], segments: [],
+  const legacy = parseCanonicalThreadFragment(JSON.stringify({ schemaVersion: 3, nextOrder: source.nextOrder, punctures: [], segments: [],
     legacyFrontStitches: source.legacyFrontStitches, needle: { side: 'front', position: null, lastPunctureId: null } }))
   const canonicalIds = new Set([...runIds,...pById.keys(),...sById.keys(),...runs.flatMap(r => [r.startAnchor?.id,r.endAnchor?.id].filter((id):id is string => !!id))])
   for (const s of legacy.legacyFrontStitches) if (orders.has(s.order) || canonicalIds.has(s.id)) throw new TypeError('Colliding legacy order/ID')
