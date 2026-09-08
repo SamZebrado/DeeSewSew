@@ -1,4 +1,5 @@
 import './style.css'
+import { createPngExportAction, type PngExportChoice } from './artwork-png-action'
 import { localize, locale, setText, switchLocale, t } from './i18n'
 import { guideTargets, guidePattern, startGuide, guideStep, loadGuide, nearGuideTarget, saveGuide, type GuideSession } from './leaf-guide'
 import { punctureGuideStep } from './guide-pattern'
@@ -752,6 +753,27 @@ document.querySelector('#export-artwork')!.addEventListener('click', () => {
   try { downloadRecovery(serializeThreadArtwork(runHistory.present), 'deesewsew-artwork.json'); announce('Artwork exported', 'Your current artwork was downloaded without changing it.') }
   catch { announce('Export failed', 'Could not download this artwork. Your work is unchanged.') }
 })
+const pngRow = document.createElement('div')
+pngRow.className = 'edit-row'
+pngRow.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))'
+pngRow.style.marginTop = '8px'
+pngRow.setAttribute('role', 'group')
+pngRow.setAttribute('aria-label', 'Save PNG image')
+const pngButtons: HTMLButtonElement[] = []
+const exportPng = createPngExportAction({
+  // These arrays contain only settled canonical items, not guide/transient overlays.
+  snapshot: () => ({ front: frontItems, back: backItems }),
+  busy: value => { for (const button of pngButtons) button.disabled = value; pngRow.setAttribute('aria-busy', String(value)) },
+  result: ok => announce(ok ? 'PNG download started' : 'PNG export failed', ok ? 'A clean image was sent to your browser downloads. Your artwork is unchanged.' : 'Could not download the PNG image. Your artwork is unchanged.'),
+})
+for (const [choice, label] of [['front', 'Front PNG'], ['back', 'Back PNG'], ['pair', 'Both PNG']] as const satisfies readonly (readonly [PngExportChoice, string])[]) {
+  const button = document.createElement('button')
+  button.type = 'button'; button.className = 'soft-button'; button.dataset.png = choice; button.textContent = label
+  button.addEventListener('click', () => { void exportPng(choice) })
+  pngButtons.push(button); pngRow.appendChild(button)
+}
+document.querySelector('#export-artwork')!.parentElement!.after(pngRow)
+localize(pngRow)
 const artworkFile = document.querySelector<HTMLInputElement>('#artwork-file')!
 document.querySelector('#import-artwork')!.addEventListener('click', () => artworkFile.click())
 let importRequest = 0

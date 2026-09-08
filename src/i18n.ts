@@ -9,6 +9,10 @@ try { storage = localStorage } catch { /* Restricted browser. */ }
 export let locale: Locale = initialLocale(storage, () => navigator.language)
 /** English message IDs are readable at call sites; artwork never contains these IDs. */
 export const messages: Record<string, string> = {
+  'Save PNG image': '保存 PNG 图片', 'Front PNG': '正面 PNG', 'Back PNG': '背面 PNG', 'Both PNG': '双面 PNG',
+  'PNG download started': 'PNG 下载已发起', 'PNG export failed': 'PNG 导出失败',
+  'A clean image was sent to your browser downloads. Your artwork is unchanged.': '纯净作品图片已发送至浏览器下载，作品未改变。',
+  'Could not download the PNG image. Your artwork is unchanged.': '无法下载 PNG 图片，作品未改变。',
   'Tulip & heart':'郁金香与爱心',
   'Tulip and heart complete':'郁金香与爱心完成了',
   'Cut thread to continue':'剪线后继续',
