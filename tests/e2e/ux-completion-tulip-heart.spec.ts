@@ -1,4 +1,5 @@
 import {expect,test} from '@playwright/test'
+import {writeFile} from 'node:fs/promises'
 import {TULIP_HEART_PATTERN} from '../../src/tulip-heart-pattern'
 
 test('actual start/puncture/cut guide creates exact independent tulip and heart with reload/history',async({page},info)=>{
@@ -34,4 +35,5 @@ test('actual start/puncture/cut guide creates exact independent tulip and heart 
   await page.screenshot({path:info.outputPath('actual-guide-back.png'),fullPage:true})
   await page.locator('#view-front').click();await page.screenshot({path:info.outputPath('actual-guide-front.png'),fullPage:true})
   await info.attach('actual-guide.json',{body:JSON.stringify(piece,null,2),contentType:'application/json'})
+  await writeFile(info.outputPath('actual-guide.json'),JSON.stringify(piece,null,2))
 })
