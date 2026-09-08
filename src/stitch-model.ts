@@ -54,7 +54,7 @@ export interface Stitch {
   order: number
   seed: number
   /** Renderer-only Node 3 item kind. Omitted by persisted Node 1/2 stitches. */
-  renderKind?: 'thread' | 'puncture'
+  renderKind?: 'thread' | 'puncture' | 'anchor'
   material?: ThreadMaterialSnapshotV1
   force?: ForceLevel
   needlePose?: NeedlePoseV1

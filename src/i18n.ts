@@ -9,6 +9,21 @@ try { storage = localStorage } catch { /* Restricted browser. */ }
 export let locale: Locale = initialLocale(storage, () => navigator.language)
 /** English message IDs are readable at call sites; artwork never contains these IDs. */
 export const messages: Record<string, string> = {
+  'Tulip & heart':'郁金香与爱心',
+  'Tulip and heart complete':'郁金香与爱心完成了',
+  'Cut thread to continue':'剪线后继续',
+  'Flip to the back for the heart':'翻到背面，开始绣爱心',
+  'Return to the front for the tulip':'回到正面，继续绣郁金香',
+  'Start a new thread at the highlighted point':'在亮点处开始一根新线',
+  'Puncture the highlighted point, then cut':'在亮点处落针，然后剪线',
+  'End thread': '结束这根线',
+  'Cut thread': '剪线',
+  'Thread ended': '这根线已结束',
+  'New thread color': '新线颜色',
+  'The previous thread ended. The next puncture starts a separate thread.': '上一根线已结束，下一针会开始一根独立的新线。',
+  'The next puncture starts a separate thread. Existing stitches stay unchanged.': '下一针会开始一根独立的新线，已有针迹保持不变。',
+  'Operation undone': '已撤销操作',
+  'Operation restored': '已恢复操作',
   'DeeSewSew': '叠绣绣',
   'DeeSewSew — Tiny browser embroidery studio': '叠绣绣 DeeSewSew — 数字刺绣工作室',
   'A tiny embroidery studio in your browser.': '浏览器里的小小数字刺绣工作室。',

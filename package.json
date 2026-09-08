@@ -4,6 +4,8 @@
   "version": "0.3.1",
   "type": "module",
   "scripts": {
+    "pattern:validate": "node scripts/pattern-lab.mjs",
+    "pattern:preview": "node scripts/pattern-lab.mjs",
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -591,6 +591,14 @@ export class EmbroideryRenderer {
 
   private drawStaticStitch(ctx: CanvasRenderingContext2D, stitch: Stitch, buildup: number): void {
     const [start, end] = this.coveragePoints(stitch)
+    if(stitch.renderKind==='anchor'){
+      const [x,y]=this.point(start),r=Math.max(.7,this.size/640*1.15)
+      ctx.save();ctx.translate(x,y);ctx.rotate((stitch.seed%7-.3)*.2)
+      ctx.fillStyle=stitch.color;ctx.shadowColor='rgba(50,35,25,.18)';ctx.shadowBlur=r*.5;ctx.shadowOffsetY=r*.4
+      ctx.beginPath();ctx.ellipse(0,0,r*1.25,r*.85,0,0,Math.PI*2);ctx.fill()
+      ctx.shadowBlur=0;ctx.shadowOffsetY=0;ctx.strokeStyle='rgba(255,250,239,.38)';ctx.lineWidth=Math.max(.35,r*.3)
+      ctx.beginPath();ctx.moveTo(-r*.55,-r*.18);ctx.lineTo(r*.5,-r*.3);ctx.stroke();ctx.restore();return
+    }
     if (stitch.renderKind === 'puncture') {
       this.drawNeedleHole(ctx, stitch, start)
       return
@@ -617,7 +625,7 @@ export class EmbroideryRenderer {
       const [start, end] = this.coveragePoints(stitch)
       const buildup = this.coverage.samplePath(start, end)
       this.drawStaticStitch(ctx, stitch, buildup)
-      if (stitch.renderKind !== 'puncture') this.coverage.addPath(start, end)
+      if (stitch.renderKind !== 'puncture' && stitch.renderKind !== 'anchor') this.coverage.addPath(start, end)
     }
     ctx.restore()
     this.drawingSettled = false
@@ -639,7 +647,7 @@ export class EmbroideryRenderer {
       const [start, end] = this.coveragePoints(stitch)
       const buildup = this.coverage.samplePath(start, end)
       this.drawStaticStitch(ctx, stitch, buildup)
-      if (stitch.renderKind !== 'puncture') this.coverage.addPath(start, end)
+      if (stitch.renderKind !== 'puncture' && stitch.renderKind !== 'anchor') this.coverage.addPath(start, end)
       this.counters.coverageAppend += 1
     }
     ctx.restore()
@@ -901,7 +909,7 @@ export class EmbroideryRenderer {
         const transition = transitions.find(item => item.stitchId === stitch.id)
         if (transition) this.drawMotion(ctx, stitch, transition, transition.sample ?? sampleStitchMotionProgress(transition.progress), true, buildup)
         else this.drawStaticStitch(ctx, stitch, buildup)
-        if (stitch.renderKind !== 'puncture') coverage.addPath(start, end)
+        if (stitch.renderKind !== 'puncture' && stitch.renderKind !== 'anchor') coverage.addPath(start, end)
       }
       this.drawPreview(ctx, anchor, target, color, transient)
       ctx.restore(); this.drawInnerRim(ctx)

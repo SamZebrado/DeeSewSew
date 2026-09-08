@@ -45,12 +45,12 @@ test('combined browser CPU and cache profile on 1000 canonical segments', async 
     for (let i = 0; i < 100; i++) {
       const start = performance.now(); document.querySelector<HTMLButtonElement>('#language-toggle')!.click(); timings.locale!.push(performance.now() - start)
     }
-    const topologyUrl = performance.getEntriesByType('resource').map(e => e.name).find(name => /\/src\/embroidery-topology\.ts(?:\?|$)/.test(name))!
-    const { parseArtworkFile, serializeEmbroideryPiece } = await import(/* @vite-ignore */ topologyUrl)
+    const topologyUrl = performance.getEntriesByType('resource').map(e => e.name).find(name => /\/src\/thread-run-storage\.ts(?:\?|$)/.test(name))!
+    const { parseThreadArtwork, serializeThreadArtwork } = await import(/* @vite-ignore */ topologyUrl)
     const raw = localStorage.getItem('deesewsew-piece-v1')!
     for (let i = 0; i < 15; i++) {
-      let start = performance.now(); const piece = parseArtworkFile(raw); timings.parse!.push(performance.now() - start)
-      start = performance.now(); serializeEmbroideryPiece(piece); timings.serialize!.push(performance.now() - start)
+      let start = performance.now(); const piece = parseThreadArtwork(raw); timings.parse!.push(performance.now() - start)
+      start = performance.now(); serializeThreadArtwork(piece); timings.serialize!.push(performance.now() - start)
     }
     document.querySelector<HTMLButtonElement>('#leaf-guide')!.click()
     for (let i = 0; i < 40; i++) { pointer('pointermove', .5 + Math.sin(i * .1) * .15, .55); await frame() }

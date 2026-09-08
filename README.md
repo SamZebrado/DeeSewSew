@@ -16,6 +16,8 @@ Move a threaded needle and make something at your own pace.
   Rotation that stops at any angle, optional stitch animation, and custom colors.
 - 简体中文／英文、本机保存、撤销／重做、JSON 导入导出和可选单色小花引导。
   Simplified Chinese/English, local saving, undo/redo, JSON import/export, and an optional monochrome flower guide.
+- 独立线段组、剪线，以及正面郁金香／背面爱心的双面引导。
+  Independent thread runs, cutting, and a front-tulip/back-heart guide.
 
 作品不上传到服务器。本机存储不可用时仍可导出当前内存中的作品。
 Artwork is not uploaded. If local storage is unavailable, the current in-memory artwork can still be exported.
@@ -26,8 +28,10 @@ Artwork is not uploaded. If local storage is unavailable, the current in-memory 
   Move to position the needle and click to puncture. The tip marks the hole; thread attaches to the eye. A directly visible needle follows outside the hoop without making outside punctures.
 - 针藏在另一面时，选择出针点即可继续，不会伪造可见针或背面线段。
   When the needle is hidden, choose its emergence point to continue; no visible needle or reverse thread is fabricated.
-- Shift 拖动、边框拖动或双指拖动可旋转；自动旋转可随时停止，也可回正面／背面。
-  Shift-drag, rim drag, or two-finger drag rotates the hoop. Stop automatic rotation anywhere or return to either face.
+- Shift 拖动、边框拖动或触屏双指拖动可旋转；自动旋转可随时停止，也可回正面／背面。
+  Shift-drag, rim drag, or two-finger touchscreen drag rotates the hoop. Stop automatic rotation anywhere or return to either face.
+- 点击“剪线”，或在绣盘内按住 Ctrl 点击并松手，结束当前线；拖动或取消不会剪线。换色也会结束旧线，同色可以开始另一根线，不连接旧针孔。
+  Choose “Cut thread”, or Ctrl-click and release inside the hoop, to end the active thread. Dragging or cancelling does not cut. Changing color also ends the old thread; separate runs may share a color without connecting old holes.
 - 触屏按下、拖动定位、松手落针。方向键旋转，Home／End 回正面／背面；Cmd/Ctrl+Z 撤销，加 Shift 重做。
   On touch, press, drag, and release to puncture. Arrow keys rotate; Home/End select front/back. Cmd/Ctrl+Z undoes; add Shift to redo.
 - 过于倾斜的角度仅供查看。关闭动画或启用系统减少动态效果会立即落定，保留实时松线跟随。
@@ -45,6 +49,11 @@ Free stitching is the default. Choose “Stitch a flower” and follow the next 
 
 背面是诚实的针线连接，不是爱心图案。完成后可主动翻面看看，不会强制旋转。已有作品会保留，包括旧针孔到新图案的真实连接；想要独立的小花，可先导出旧作品，再清空布料。
 The back contains honest thread routing, not a heart motif. Completion invites you to inspect it without forcing a flip. Existing artwork is retained, including the real connection from the old hole to the new pattern. For a standalone flower, export your previous work before clearing the fabric.
+
+## 郁金香与爱心 / Tulip & heart
+
+这个独立引导先绣正面小郁金香，再提示翻到背面绣爱心。每条线按“亮点起线 → 下一亮点落针 → 剪线”完成，共 24 根线、48 次穿刺。起线从对面穿出，不造连接线；另一面只留下很小的同色起止锚点，不是完整打结模拟。退出、重载和撤销／重做保留真实作品。
+This separate guide makes a small front tulip, then asks you to turn over for the heart. Each stroke follows “start at the highlight → puncture the next highlight → cut”: 24 runs and 48 punctures. A new thread emerges from the opposite face without a connecting segment. Tiny same-color start/end anchors remain on that face; they are not a full knot simulation. Exiting, reload and undo/redo preserve the real artwork.
 
 ## 本地开发 / Development
 

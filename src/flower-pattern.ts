@@ -1,10 +1,11 @@
 import type { NormalizedPoint } from './stitch-model'
 
-export interface GuidePattern {
+export interface FlowerDefinition {
   id: string
   points: readonly NormalizedPoint[]
   /** Design intent, not a second rendering source. */
   frontEdges: readonly (readonly [number, number])[]
+  backEdges: readonly (readonly [number, number])[]
   backMotif: 'routing'
   /** Closed route: first segment is BACK for a fresh front-side needle. */
   sequence: readonly number[]
@@ -14,7 +15,7 @@ export interface GuidePattern {
 
 /** Frozen after the bounded A–F canonical-renderer design pass. Only this fixed
  * table ships; the offline search and rejected dual-face motifs do not. */
-export const FLOWER: GuidePattern = {
+export const FLOWER: FlowerDefinition = {
   id: 'soft-flower-v1',
   points: [
     { x: .5, y: .5 },
@@ -34,6 +35,8 @@ export const FLOWER: GuidePattern = {
     [0, 13], [13, 14], [14, 15], [15, 16], [16, 0],
   ],
   backMotif: 'routing',
+  // Independently frozen expected routing edges, not a second renderer.
+  backEdges: [[2,3],[4,0],[5,0],[12,13],[14,13],[0,12],[11,10],[11,10],[9,0],[1,2],[1,0],[9,8],[0,16],[15,14],[15,16],[0,8],[7,6],[7,6],[5,0],[4,3]],
   sequence: [2, 3, 4, 0, 5, 0, 12, 13, 14, 13, 0, 12, 11, 10, 11, 10, 9, 0, 1, 2, 1, 0, 9, 8, 0, 16, 15, 14, 15, 16, 0, 8, 7, 6, 7, 6, 5, 0, 4, 3, 2],
   entry: 'Stitch a flower',
   completion: 'Finished. Take a look at the back?',
