@@ -50,8 +50,12 @@ const rawPiece = (page: Page) => page.evaluate(() => localStorage.getItem('deese
 const counters = (page: Page) => page.locator('.hoop-face canvas').evaluateAll(canvases => canvases.map(canvas =>
   ({ ...(canvas as unknown as { __deesewsewRendererCounters: Record<string, number> }).__deesewsewRendererCounters })))
 async function puncture(page: Page, x: number, y: number) {
-  const box = (await page.locator('#embroidery').boundingBox())!
+  const canvas = page.locator('#embroidery')
+  await canvas.scrollIntoViewIfNeeded()
+  const count = await page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{"punctures":[]}').punctures.length)
+  const box = (await canvas.boundingBox())!
   await page.mouse.click(box.x + box.width * x, box.y + box.height * y)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('deesewsew-piece-v1') ?? '{"punctures":[]}').punctures.length)).toBe(count + 1)
 }
 async function makePiece(page: Page) {
   await page.addInitScript(() => {
