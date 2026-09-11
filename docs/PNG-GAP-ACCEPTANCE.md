@@ -10,3 +10,7 @@ Base2054b4f; isolated test-only branch. Plan before implementation:
 No product changes or browser execution until main grants the slot. Tests exercise mocked failure scheduling but native PNG encoding/download. Main owns candidate integration, review and publication.
 
 Prepared four tests; Playwright listing resolves all five including the existing acceptance, typecheck and diff whitespace check pass. No browser ran. Node fixture verification showed 8,000 raw legacy stitches are NOT accepted: migration serialization reaches its existing size guard first. Therefore the test binary-searches the largest accepted prefix of this exact fixture and asserts the next prefix fails. Actual Node result:6,337 stitches,997,933 normalized v4 characters, exact serialize/parse roundtrip. This is an ingestion-capacity boundary for this fixture, not a claim of reaching the v4 two-million-character ceiling. Vite SSR attempted an HMR listener denied by sandbox; computation completed and server was closed without escalation.
+
+## Assertion-strengthening plan
+
+Read-only review identified two false-positive risks. Strengthen the existing tests only: assert the actual failure announcement and exactly one null injection; during pending export add a second puncture, verify a new FRONT segment in canonical JSON, restore native encoding, and require a fresh FRONT PNG to differ from the captured image. Preserve snapshot equality and latest-state checks. No browser execution or product changes in this patch.

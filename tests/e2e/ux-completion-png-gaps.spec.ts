@@ -55,6 +55,7 @@ test('encoding snapshot survives intervening real canonical edit', async ({ page
   const before = await download(page, info)
   await page.evaluate(() => {
     const original = HTMLCanvasElement.prototype.toBlob
+    Object.assign(window, { restorePngEncoder: () => { HTMLCanvasElement.prototype.toBlob = original } })
     HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
       original.call(this, blob => { Object.assign(window, { releasePng: () => callback(blob) }) }, ...args)
     }
@@ -66,11 +67,16 @@ test('encoding snapshot survives intervening real canonical edit', async ({ page
   const box = (await hoop.boundingBox())!
   await page.mouse.click(box.x + box.width * .45, box.y + box.height * .6)
   await expect.poll(() => stored(page)).not.toBe(raw)
+  await page.mouse.click(box.x + box.width * .6, box.y + box.height * .55)
+  const initialFrontSegments = parseThreadArtwork(raw).topology.segments.filter(segment => segment.side === 'front').length
+  await expect.poll(async () => parseThreadArtwork((await stored(page))!).topology.segments.filter(segment => segment.side === 'front').length).toBe(initialFrontSegments + 1)
   const edited = await stored(page)
-  await page.evaluate(() => (window as any).releasePng())
+  await page.evaluate(() => { (window as any).restorePngEncoder(); (window as any).releasePng() })
   expect(await save(await event, info)).toEqual(before)
   expect(await stored(page)).toBe(edited)
   await expect(page.locator('[data-png="front"]')).toBeEnabled()
+  expect(await download(page, info)).not.toEqual(before)
+  expect(await stored(page)).toBe(edited)
 })
 
 test('null encoding detaches temporary canvas and retry succeeds', async ({ page }, info) => {
@@ -78,16 +84,21 @@ test('null encoding detaches temporary canvas and retry succeeds', async ({ page
   const original = await stored(page), canvasCount = await page.locator('canvas').count()
   await page.evaluate(() => {
     const original = HTMLCanvasElement.prototype.toBlob
+    Object.assign(window, { nullPngInjections: 0 })
     HTMLCanvasElement.prototype.toBlob = function (callback) {
+      ;(window as any).nullPngInjections++
       HTMLCanvasElement.prototype.toBlob = original
       callback(null)
     }
   })
   await page.locator('[data-png="front"]').click()
+  await expect(page.locator('#status-title')).toHaveText('PNG export failed')
+  expect(await page.evaluate(() => (window as any).nullPngInjections)).toBe(1)
   await expect(page.locator('[data-png="front"]')).toBeEnabled()
   await expect(page.locator('canvas')).toHaveCount(canvasCount)
   expect(await stored(page)).toBe(original)
   await download(page, info)
+  expect(await page.evaluate(() => (window as any).nullPngInjections)).toBe(1)
   await expect(page.locator('canvas')).toHaveCount(canvasCount)
   expect(await stored(page)).toBe(original)
 })
