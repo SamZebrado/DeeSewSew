@@ -18,7 +18,7 @@ export const messages: Record<string, string> = {
   'Soft daylight': '柔和日光',
   'Warm lamp': '暖灯',
   'Work light': '工作灯',
-  'Local lighting only; your stitches stay unchanged.': '仅调整本机光照，已有针线保持不变。',
+  'Screen lighting only; PNG images always use soft daylight.': '仅调整屏幕光照；PNG 图片始终使用柔和日光。',
   'Tulip & heart':'郁金香与爱心',
   'Tulip and heart complete':'郁金香与爱心完成了',
   'Cut thread to continue':'剪线后继续',

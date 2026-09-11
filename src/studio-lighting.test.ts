@@ -62,7 +62,7 @@ test('settings write failure is reported while the selected session setting rema
 
 test('lighting labels and setting-failure message have Chinese and English text', () => {
   for (const source of ['Appearance', 'Lighting', ...STUDIO_LIGHTING_OPTIONS.map(option => option.label),
-    'Local lighting only; your stitches stay unchanged.', 'Studio settings are temporary; device storage failed.']) {
+    'Screen lighting only; PNG images always use soft daylight.', 'Studio settings are temporary; device storage failed.']) {
     expect(t(source, 'en')).toBe(source)
     expect(t(source, 'zh')).not.toBe(source)
   }

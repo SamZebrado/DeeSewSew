@@ -50,6 +50,9 @@ Choose “Front PNG”, “Back PNG” or “Both PNG” to download artwork wit
 PNG 是展示图片，不能代替可继续编辑的 JSON 备份。下载去向由浏览器决定；失败时作品保持不变，可以重试。
 PNG is a flattened image, not a replacement for an editable JSON backup. Your browser controls the download destination; failure leaves the artwork unchanged and permits retry.
 
+“外观”中的三种光照仅改变本机屏幕展示，不改变针线。PNG 始终使用标准柔和日光，不随屏幕光照变化。
+The three lighting choices under “Appearance” affect only the local screen, not stitches. PNG exports always use standardized soft daylight, independent of screen lighting.
+
 ## 小花引导 / Flower guide
 
 默认自由刺绣。点击“绣一朵小花”，按下一个高亮点落针，在正面绣出四瓣小花。空白作品需 41 次落针；从背面持针开始则为 40 次。引导使用真实针线逻辑和一种选定颜色，不凭空添加首段线。撤销回退进度，刷新继续，退出后线段保留为普通作品。
