@@ -21,7 +21,7 @@ function renderFace({ side, items, size = 1024 }: ArtworkPngOptions): HTMLCanvas
     document.body.appendChild(canvas)
     if (canvas.clientWidth !== size || canvas.clientHeight !== size) throw new Error('PNG canvas layout unavailable')
     if (!canvas.getContext('2d')) throw new Error('PNG canvas context unavailable')
-    renderer = new EmbroideryRenderer(canvas, side, { maxDevicePixelRatio: 1 })
+    renderer = new EmbroideryRenderer(canvas, side, { fixedDevicePixelRatio: 1 })
     renderer.render(items, null, null, '#000000', null)
     // Rendering is synchronous: no observer or live render loop is needed during encoding.
     renderer.destroy()

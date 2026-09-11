@@ -27,6 +27,19 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./')
 })
 
+for (const deviceScaleFactor of [.8, 2]) test(`PNG dimensions stay exact at device pixel ratio ${deviceScaleFactor}`, async ({ browser }, info) => {
+  const context = await browser.newContext({ deviceScaleFactor, baseURL: info.project.use.baseURL })
+  try {
+    const page = await context.newPage(); await page.goto('./')
+    expect(await page.evaluate(() => devicePixelRatio)).toBeCloseTo(deviceScaleFactor)
+    for (const choice of ['front', 'back', 'pair']) {
+      const bytes = await download(page, info, choice)
+      expect(bytes.readUInt32BE(16)).toBe(choice === 'pair' ? 2048 : 1024)
+      expect(bytes.readUInt32BE(20)).toBe(1024)
+    }
+  } finally { await context.close() }
+})
+
 test('actual ThreadRun file import and reload preserve clean PNG and canonical JSON', async ({ page }, info) => {
   const raw = small(); await importRaw(page, raw)
   const front = await download(page, info), back = await download(page, info, 'back')

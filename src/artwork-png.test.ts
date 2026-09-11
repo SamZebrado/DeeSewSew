@@ -56,7 +56,7 @@ describe('clean canonical PNG export boundary', () => {
     const items = Object.freeze([{ id: 'canonical-item' }]) as unknown as readonly Stitch[]
     const blob = await exportArtworkPng({ side, items })
     expect(blob.type).toBe('image/png')
-    expect(calls.construct).toHaveBeenCalledWith(side, { maxDevicePixelRatio: 1 })
+    expect(calls.construct).toHaveBeenCalledWith(side, { fixedDevicePixelRatio: 1 })
     expect(calls.render).toHaveBeenCalledExactlyOnceWith(items, null, null, '#000000', null)
     expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/png')
     expect(calls.destroy).toHaveBeenCalledTimes(1)

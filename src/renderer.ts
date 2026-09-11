@@ -46,6 +46,8 @@ export interface TransientThreadVisual {
 export interface EmbroideryRendererOptions {
   lighting?: LightingPresetId | LightingProfile
   maxDevicePixelRatio?: number
+  /** Offscreen output may request one bitmap pixel per CSS pixel, even below device DPR 1. */
+  fixedDevicePixelRatio?: 1
 }
 
 export interface RendererDevCounters {
@@ -134,6 +136,7 @@ export class EmbroideryRenderer {
   private readonly threadStyleCache = new WeakMap<Stitch, ThreadStyleMemo>()
   private readonly counters = makeCounters()
   private readonly maxDevicePixelRatio: number
+  private readonly fixedDevicePixelRatio: 1 | undefined
   private readonly resizeObserver: ResizeObserver
   private size = 0
   private dpr = 1
@@ -155,6 +158,7 @@ export class EmbroideryRenderer {
     this.settledCanvas = document.createElement('canvas')
     this.settledContext = this.settledCanvas.getContext('2d', { alpha: false })!
     this.maxDevicePixelRatio = finiteDprLimit(options.maxDevicePixelRatio)
+    this.fixedDevicePixelRatio = options.fixedDevicePixelRatio === 1 ? 1 : undefined
     this.lighting = this.resolveLighting(options.lighting ?? DEFAULT_LIGHTING_PRESET_ID)
     this.lightingKey = lightingProfileKey(this.lighting)
     this.resizeObserver = new ResizeObserver(() => this.resize(true))
@@ -218,7 +222,7 @@ export class EmbroideryRenderer {
 
   private resize(notify: boolean): void {
     const size = Math.max(1, Math.min(this.canvas.clientWidth, this.canvas.clientHeight))
-    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDevicePixelRatio)
+    const dpr = this.fixedDevicePixelRatio ?? Math.min(window.devicePixelRatio || 1, this.maxDevicePixelRatio)
     if (Math.abs(this.size - size) < 0.5 && this.dpr === dpr) return
     const reason: Exclude<SettledCacheInvalidationReason, 'initial'> = this.size > 0 && this.dpr !== dpr ? 'dpr' : 'resize'
     this.size = size

@@ -18,6 +18,8 @@ Move a threaded needle and make something at your own pace.
   Simplified Chinese/English, local saving, undo/redo, JSON import/export, and an optional monochrome flower guide.
 - 独立线段组、剪线，以及正面郁金香／背面爱心的双面引导。
   Independent thread runs, cutting, and a front-tulip/back-heart guide.
+- 正面、背面或正反面并排的干净 PNG 图片导出。
+  Clean front, back, or side-by-side PNG image export.
 
 作品不上传到服务器。本机存储不可用时仍可导出当前内存中的作品。
 Artwork is not uploaded. If local storage is unavailable, the current in-memory artwork can still be exported.
@@ -41,6 +43,12 @@ Artwork is not uploaded. If local storage is unavailable, the current in-memory 
 
 导出下载包含规范拓扑的版本化 JSON。导入先校验整个文件，再确认替换非空作品；错误文件不会清空当前作品。浏览器存储不是永久备份，请保留导出副本。
 Export downloads versioned JSON with canonical topology. Import validates the whole file before confirming replacement of nonempty work; invalid files do not clear the current piece. Browser storage is not a permanent archive: keep exported backups.
+
+选择“正面 PNG”“背面 PNG”或“双面 PNG”，可下载不含工具栏、针、引导点和未完成松线的作品图片。每面为 1024 × 1024 像素；双面图左边是正面、右边是背面，包含真实起止锚点，使用固定柔和光照和中性背景，全程在本机生成。
+Choose “Front PNG”, “Back PNG” or “Both PNG” to download artwork without toolbars, needle, guide targets or unfinished loose thread. Each face is 1024 × 1024 pixels; the pair places FRONT on the left and BACK on the right, including canonical start/end anchors, with fixed soft lighting and a neutral background. Images are generated locally.
+
+PNG 是展示图片，不能代替可继续编辑的 JSON 备份。下载去向由浏览器决定；失败时作品保持不变，可以重试。
+PNG is a flattened image, not a replacement for an editable JSON backup. Your browser controls the download destination; failure leaves the artwork unchanged and permits retry.
 
 ## 小花引导 / Flower guide
 
