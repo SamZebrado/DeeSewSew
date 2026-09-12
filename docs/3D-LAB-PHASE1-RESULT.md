@@ -1,6 +1,35 @@
 # 3D Lab Phase 1 proof — FIX_FIRST for publication
 
 Local-only isolated candidate. No Bridge, push, production migration or approval.
+
+## Follow-up implementation (supersedes static-display limitations below)
+
+The follow-up introduces a 1.2-second analytical artistic radial response only
+after removal. Amplitude <=0.07 support units, endpoint/material weighting,
+exponential damping, exact rest at time endpoints. Actual envelope is much
+smaller than the bound. No canonical mutation, solver integration, per-node state
+or frame-rate dependence; reduced-motion skips, hidden/pagehide cancels.
+
+Camera has explicit world-space `target`; UI targets canonical support origin,
+projects local→world anchors, and converts ray intersections world→support local.
+Nonidentity ray correspondence and exact transform preservation are unit tested.
+Independent review caught two additional issues now fixed: wheel during held
+pointer suppresses click edits, and permanent+removed import fails closed.
+Permanent support action is disabled and no-op commits do not add undo entries.
+
+First-entry production lab now registers the existing generated worker. The
+generator already precaches lab HTML and assets; worker policy is unchanged.
+Focused offline browser passed first-entry lab→offline reload→actual production
+two-puncture v4 artwork→lab save/load→invalid v4 into lab rejection→production
+reload with byte-identical v4. This replaces the earlier sentinel-only boundary.
+Final follow-up build and 202 units / 34 files pass. Final browser rerun and CPU
+profile are queued behind the main integrator's exclusive browser validation.
+
+The initial profile used synthetic PointerEvents and is INVALID because capture
+requires an active pointer. `profile-invalid-synthetic-pointer.json` is preserved
+but is not performance evidence. Corrected harness measures real pointerup handler
+CPU using capture/bubble timestamps, with 5 warmups and 21 measured samples;
+wheel CPU uses explicitly synthetic wheel events. Never infer GPU/mobile/power.
 ADR committed first at 7543300. The lab uses one sphere, one ordered contact run,
 32 anchor maximum, 24 sampled edges per span. Every anchor is a unit local Vec3;
 its world position is local + canonical support translation. Camera orbits the

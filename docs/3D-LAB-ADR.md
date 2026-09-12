@@ -50,3 +50,20 @@ Save/load is validated, separate and deterministic, failures preserve current st
 Unit tests cover picking, true depth, removal, serialization, malformed inputs and
 budget. Browser evidence must cover camera/edit separation, removal/reinstall,
 save/reload and real spatial views before any release-readiness claim.
+
+## Follow-up decision: bounded artistic display relaxation and offline isolation
+
+Before code: on support removal only, evaluate a 1.2-second analytical damped
+envelope from absolute elapsed time. Each span receives a small radial offset
+weighted by sin(pi * material coordinate); its attachments stay exact. Both time
+endpoints are zero, no integration state, no timer per node, and canonical vectors
+never change. Frame cadence only selects samples; hidden page/reinstall stops and
+returns immediately to rest. Reduced-motion skips this decorative response.
+This intentionally artistic display is not constitutive thread stiffness or silk
+equilibrium. No perpetual animation or solver. Frame request lives only during
+the bounded response. Add time-sampling invariance and canonical equality tests.
+
+The multipage build already precaches lab3d.html and assets. Direct lab entry must
+register the existing worker in production so first-visit offline reload works;
+no worker source/schema/cache-policy fork. Test first-entry lab offline then main
+v4 UI real stitching/save, lab invalid load, return to actual main artwork intact.

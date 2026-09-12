@@ -35,6 +35,7 @@ export function parseLab(raw: string): LabArtwork {
   const a = JSON.parse(raw), s = a?.support
   if (a?.format !== 'deesewsew-lab3d' || a.version !== 1 || a.display !== 'artistic-rest-shape' || s?.id !== 'sphere-1' || s.shape !== 'sphere' || s.radius !== 1 || !['removable','permanent'].includes(s.role) || !['installed','removed'].includes(s.state) || !Array.isArray(s.transform) || s.transform.length !== 3 || s.transform.some((v: unknown) => typeof v !== 'number' || !Number.isFinite(v) || Math.abs(v)>10)) throw Error('Not a supported experimental lab file')
   let validated = emptyLab()
+  if(s.role==='permanent'&&s.state==='removed')throw Error('Permanent support cannot be removed')
   if (a.run !== null) {
     if (a.run?.id !== 'run-1' || a.run.color !== '#9b4a48' || a.run.path !== 'great-circle-v1' || !Array.isArray(a.run.anchors) || !a.run.anchors.length) throw Error('Invalid lab run')
     for (const p of a.run.anchors) {
@@ -46,19 +47,27 @@ export function parseLab(raw: string): LabArtwork {
 }
 export const serializeLab = (a: LabArtwork) => JSON.stringify(parseLab(JSON.stringify(a)))
 export const worldAnchor = (a: LabArtwork, p: Vec3): Vec3 => add(p,a.support.transform)
-export interface Camera { yaw: number; pitch: number; distance: number }
+/** Artistic, bounded radial release response; not a material/force solver. */
+export function displayPoint(rest: Vec3, material: number, elapsedMs: number): Vec3 {
+  if(elapsedMs<=0 || elapsedMs>=1200)return rest
+  const t=elapsedMs/1200
+  return scale(rest,1+.07*Math.sin(Math.PI*material)*Math.sin(2*Math.PI*t)*Math.exp(-4*t)*(1-t)**2)
+}
+/** Lab camera targets the canonical support origin. Inputs/outputs are world-space. */
+export interface Camera { yaw: number; pitch: number; distance: number; target?: Vec3 }
 export function basis(c: Camera): [Vec3, Vec3, Vec3] {
   const forward: Vec3 = [Math.sin(c.yaw)*Math.cos(c.pitch), Math.sin(c.pitch), Math.cos(c.yaw)*Math.cos(c.pitch)]
   return [[Math.cos(c.yaw), 0, -Math.sin(c.yaw)], [-Math.sin(c.yaw)*Math.sin(c.pitch), Math.cos(c.pitch), -Math.cos(c.yaw)*Math.sin(c.pitch)], forward]
 }
 export function project(p: Vec3, c: Camera): Vec3 {
-  const [right, up, forward] = basis(c), depth = c.distance-dot(p, forward)
-  return [dot(p,right)/depth, -dot(p,up)/depth, depth]
+  const relative=add(p,scale(c.target??[0,0,0],-1))
+  const [right, up, forward] = basis(c), depth = c.distance-dot(relative, forward)
+  return [dot(relative,right)/depth, -dot(relative,up)/depth, depth]
 }
 export function pick(x: number, y: number, c: Camera): Vec3 | null {
   const [right, up, forward] = basis(c), origin=scale(forward,c.distance)
   const direction=unit(add(add(scale(right,x),scale(up,-y)),scale(forward,-1)))
   const b=dot(origin,direction), discriminant=b*b-dot(origin,origin)+1
   if(discriminant<0)return null
-  return unit(add(origin,scale(direction,-b-Math.sqrt(discriminant))))
+  return add(unit(add(origin,scale(direction,-b-Math.sqrt(discriminant)))),c.target??[0,0,0])
 }

@@ -6,7 +6,7 @@ const browser=await chromium.launch({headless:true,channel:'chrome'})
 try{
  const context=await browser.newContext({viewport:{width:1200,height:960},recordVideo:{dir:out,size:{width:1200,height:960}}})
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message))
- await page.goto('http://127.0.0.1:4193/DeeSewSew/lab3d.html')
+ await page.goto(process.env.LAB_URL??'http://127.0.0.1:4193/DeeSewSew/lab3d.html')
  await page.evaluate(()=>localStorage.setItem('deesewsew.artwork.v4.test-sentinel','unchanged-normal-data'))
  const canvas=page.locator('canvas');await canvas.scrollIntoViewIfNeeded();const b=await canvas.boundingBox(),x=b.x+b.width/2,y=b.y+b.height/2
  const canonical=()=>canvas.getAttribute('data-canonical')
@@ -14,6 +14,7 @@ try{
  await page.locator('#tool').click();await canvas.scrollIntoViewIfNeeded()
  for(const [dx,dy] of [[-90,-60],[70,-90],[110,70],[-70,95]]){await page.mouse.click(x+dx,y+dy);await page.waitForTimeout(350)}
  const original=await canonical();assert.equal(JSON.parse(original).run.anchors.length,4)
+ await page.mouse.move(x,y);await page.mouse.down();await page.mouse.wheel(0,20);await page.mouse.up();assert.equal(await canonical(),original)
  await page.screenshot({path:`${out}/installed.png`})
  await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+240,y+60,{steps:30});await page.mouse.up();assert.equal(await canonical(),original)
  await page.screenshot({path:`${out}/orbit.png`})
