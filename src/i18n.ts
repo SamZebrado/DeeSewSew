@@ -9,6 +9,8 @@ try { storage = localStorage } catch { /* Restricted browser. */ }
 export let locale: Locale = initialLocale(storage, () => navigator.language)
 /** English message IDs are readable at call sites; artwork never contains these IDs. */
 export const messages: Record<string, string> = {
+  'Ctrl + click the fabric to cut thread': 'Ctrl + 点击绣布可剪线',
+  'Cut thread (Ctrl + click fabric)': '剪线（Ctrl + 点击绣布）',
   'Save PNG image': '保存 PNG 图片', 'Front PNG': '正面 PNG', 'Back PNG': '背面 PNG', 'Both PNG': '双面 PNG',
   'PNG download started': 'PNG 下载已发起', 'PNG export failed': 'PNG 导出失败',
   'A clean image was sent to your browser downloads. Your artwork is unchanged.': '纯净作品图片已发送至浏览器下载，作品未改变。',

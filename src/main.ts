@@ -59,6 +59,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="needle-state" id="needle-state" aria-live="polite"><span class="needle-state-icon" aria-hidden="true">⌁</span><strong id="needle-side">Needle: front</strong><small id="edit-state">Front surface editable</small></div>
         <p class="canvas-help" id="canvas-help">Move the needle; the loose thread follows. Click to puncture, then choose where it emerges.</p>
         <p class="rotation-hint">Hold Shift and drag to rotate · Drag with two fingers to rotate</p>
+        <p class="rotation-hint" id="cut-shortcut-hint">Ctrl + click the fabric to cut thread</p>
       </div>
       <aside class="tools" aria-label="Stitch controls">
         <section class="tool-group"><div class="tool-heading"><h2>Thread</h2><span id="color-name">${colorName(settings.selectedColor)}</span></div><div class="palette" id="palette" role="radiogroup" aria-label="Thread color">${colors.map(([name, value]) => swatchMarkup(name, value, settings.selectedColor === value)).join('')}${settings.customColors.map((value) => swatchMarkup(colorName(value), value, settings.selectedColor === value)).join('')}</div><div class="custom-color-row"><label class="color-picker" for="custom-color"><input id="custom-color" type="color" value="${settings.selectedColor}" aria-label="Choose a custom thread color"><span>Custom</span></label><button class="add-color-button" id="add-color" type="button">Add color</button></div></section>
@@ -69,7 +70,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div><div class="view-actions"><button class="soft-button" id="view-front" type="button">Return front</button><button class="soft-button" id="view-back" type="button">Snap back</button></div></section>
         <details class="tool-group lighting-options"><summary>Appearance</summary><label for="studio-lighting">Lighting</label><select id="studio-lighting" aria-describedby="lighting-help">${STUDIO_LIGHTING_OPTIONS.map(option => `<option value="${option.id}"${option.id === studioLightingId(settings.lightingId) ? ' selected' : ''}>${option.label}</option>`).join('')}</select><p id="lighting-help">Screen lighting only; PNG images always use soft daylight.</p></details>
         <section class="tool-group history-group"><h2>Edit</h2><div class="edit-row"><button class="soft-button" id="undo" type="button" disabled aria-label="Undo last puncture">↶ <span>Undo</span></button><button class="soft-button" id="redo" type="button" disabled aria-label="Redo last puncture">↷ <span>Redo</span></button></div><button class="clear-button" id="clear" type="button" disabled>Clear fabric</button></section>
-        <section class="tool-group"><h2>Artwork</h2><div class="edit-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><button class="soft-button" id="leaf-guide" type="button">Stitch a flower</button><p id="guide-copy" hidden></p></section>
+        <section class="tool-group artwork-group"><h2>Artwork</h2><div class="artwork-actions"><div class="artwork-action-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><div class="artwork-action-row"><button class="soft-button" id="leaf-guide" type="button">Stitch a flower</button></div></div><p id="guide-copy" hidden></p></section>
         <div class="quiet-tip" role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true">✦</span><p><strong id="status-title">Needle ready</strong><br><span id="status-copy">Move the front-side needle, then click to puncture.</span></p></div>
       </aside>
     </section>
@@ -144,7 +145,11 @@ const redoButton = document.querySelector<HTMLButtonElement>('#redo')!
 const clearButton = document.querySelector<HTMLButtonElement>('#clear')!
 const endThreadButton = document.createElement('button')
 endThreadButton.id = 'end-thread'; endThreadButton.type = 'button'; endThreadButton.className = 'soft-button'
-setText(endThreadButton, 'Cut thread'); clearButton.before(endThreadButton)
+clearButton.before(endThreadButton)
+endThreadButton.title = 'Cut thread (Ctrl + click fabric)'
+endThreadButton.setAttribute('aria-describedby', 'cut-shortcut-hint')
+localize(endThreadButton)
+setText(endThreadButton, 'Cut thread')
 const statusTitle = document.querySelector<HTMLElement>('#status-title')!
 const statusCopy = document.querySelector<HTMLElement>('#status-copy')!
 const needleSideLabel = document.querySelector<HTMLElement>('#needle-side')!
@@ -765,9 +770,7 @@ document.querySelector('#export-artwork')!.addEventListener('click', () => {
   catch { announce('Export failed', 'Could not download this artwork. Your work is unchanged.') }
 })
 const pngRow = document.createElement('div')
-pngRow.className = 'edit-row'
-pngRow.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))'
-pngRow.style.marginTop = '8px'
+pngRow.className = 'artwork-action-row'
 pngRow.setAttribute('role', 'group')
 pngRow.setAttribute('aria-label', 'Save PNG image')
 const pngButtons: HTMLButtonElement[] = []

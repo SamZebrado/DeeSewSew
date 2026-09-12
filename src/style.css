@@ -100,6 +100,10 @@ h2 { margin:0 0 12px; font-size:12px; text-transform:uppercase; letter-spacing:.
 .edit-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .soft-button,.clear-button { min-height:46px; border-radius:var(--control-radius); cursor:pointer; }
 .soft-button { border:1px solid var(--line); background:var(--surface-muted); color:var(--ink); }
+.artwork-actions { --action-gap:8px; display:grid; gap:var(--action-gap); }
+.artwork-action-row { display:flex; align-items:stretch; gap:var(--action-gap); }
+.artwork-actions .soft-button { min-width:0; max-width:100%; min-height:46px; padding:8px 12px; font-size:13px; font-weight:500; line-height:1.4; text-align:center; white-space:normal; overflow-wrap:anywhere; }
+.artwork-actions .soft-button:hover:not(:disabled) { border-color:var(--accent-line); background:var(--accent-soft); }
 .clear-button { width:100%; margin-top:8px; border:0; background:transparent; color:var(--rose); font-size:13px; }
 button:disabled { opacity:.38; cursor:default; }
 .history-group { border-bottom:0; padding-bottom:8px; }
@@ -134,7 +138,6 @@ button:disabled { opacity:.38; cursor:default; }
 #floating-needle { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 20; }
 #guide-target { position: absolute; width: 16px; height: 16px; border: 2px dashed var(--accent); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; background: rgba(247,246,241,.45); }
 #guide-copy { color: var(--ink-soft); font-size: .78rem; line-height: 1.5; margin-bottom: 0; }
-#leaf-guide { margin-top: 10px; font-size: .8rem; }
 #language-toggle { min-height: 44px; min-width: 44px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); padding: 6px 10px; cursor: pointer; }
 .masthead > div:last-child { display: flex; flex-direction: column; align-items: flex-end; max-width: 42%; }
 .masthead .save-state { margin-top: 6px; text-align: right; }
