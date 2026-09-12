@@ -1,4 +1,11 @@
 import { test,expect } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { readFileSync,readdirSync,writeFileSync } from 'node:fs'
+test.beforeAll(async({browser},info)=>{
+ const hash=(path:string)=>createHash('sha256').update(readFileSync(path)).digest('hex')
+ writeFileSync(info.outputPath('runtime-provenance.json'),JSON.stringify({head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),status:execFileSync('git',['status','--short'],{encoding:'utf8'}).trim(),time:new Date().toISOString(),browser:browser.version(),assets:Object.fromEntries(readdirSync('dist/assets').map(p=>[p,hash(`dist/assets/${p}`)])),source:Object.fromEntries(['src/lab3d.ts','src/lab3d-model.ts','src/lab3d-input.ts','src/lab3d.css','src/main.ts','src/i18n.ts','src/style.css'].map(p=>[p,hash(p)]))},null,2))
+})
 const sample={format:'deesewsew-lab3d',version:1,support:{id:'sphere-1',shape:'sphere',radius:1,transform:[2,-3,4],role:'removable',state:'installed'},run:{id:'run-1',color:'#9b4a48',path:'great-circle-v1',anchors:[[0,0,1],[.6,0,.8],[0,.6,.8]]},display:'artistic-rest-shape'}
 test('delayed import success and error cannot overwrite newer edits or feedback',async({page})=>{
  await page.goto('lab3d.html');await page.evaluate(()=>{const original=File.prototype.text;File.prototype.text=function(){if(this.name.startsWith('slow'))return new Promise((resolve,reject)=>{(window as any).finishRead=()=>original.call(this).then(resolve);(window as any).rejectRead=()=>reject(Error('delayed failure'))});return original.call(this)}})
