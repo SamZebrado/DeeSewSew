@@ -59,7 +59,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <div class="needle-state" id="needle-state" aria-live="polite"><span class="needle-state-icon" aria-hidden="true">⌁</span><strong id="needle-side">Needle: front</strong><small id="edit-state">Front surface editable</small></div>
         <p class="canvas-help" id="canvas-help">Move the needle; the loose thread follows. Click to puncture, then choose where it emerges.</p>
         <p class="rotation-hint">Hold Shift and drag to rotate · Drag with two fingers to rotate</p>
-        <p class="rotation-hint" id="cut-shortcut-hint">Ctrl + click the fabric to cut thread</p>
+        <p class="shortcut-hint" id="cut-shortcut-hint">Ctrl + click the fabric to cut thread</p>
       </div>
       <aside class="tools" aria-label="Stitch controls">
         <section class="tool-group"><div class="tool-heading"><h2>Thread</h2><span id="color-name">${colorName(settings.selectedColor)}</span></div><div class="palette" id="palette" role="radiogroup" aria-label="Thread color">${colors.map(([name, value]) => swatchMarkup(name, value, settings.selectedColor === value)).join('')}${settings.customColors.map((value) => swatchMarkup(colorName(value), value, settings.selectedColor === value)).join('')}</div><div class="custom-color-row"><label class="color-picker" for="custom-color"><input id="custom-color" type="color" value="${settings.selectedColor}" aria-label="Choose a custom thread color"><span>Custom</span></label><button class="add-color-button" id="add-color" type="button">Add color</button></div></section>
