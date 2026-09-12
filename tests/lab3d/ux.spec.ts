@@ -1,5 +1,13 @@
 import { test,expect } from '@playwright/test'
 const sample={format:'deesewsew-lab3d',version:1,support:{id:'sphere-1',shape:'sphere',radius:1,transform:[2,-3,4],role:'removable',state:'installed'},run:{id:'run-1',color:'#9b4a48',path:'great-circle-v1',anchors:[[0,0,1],[.6,0,.8],[0,.6,.8]]},display:'artistic-rest-shape'}
+test('delayed import success and error cannot overwrite newer edits or feedback',async({page})=>{
+ await page.goto('lab3d.html');await page.evaluate(()=>{const original=File.prototype.text;File.prototype.text=function(){if(this.name.startsWith('slow'))return new Promise((resolve,reject)=>{(window as any).finishRead=()=>original.call(this).then(resolve);(window as any).rejectRead=()=>reject(Error('delayed failure'))});return original.call(this)}})
+ const canvas=page.locator('canvas'),file=(name:string)=>({name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(sample))})
+ await page.locator('#import').setInputFiles(file('slow-success.json'));await page.locator('#tool').click();await canvas.focus();await page.keyboard.press('Enter');const current=await canvas.getAttribute('data-canonical')
+ await page.evaluate(()=>(window as any).finishRead());expect(await canvas.getAttribute('data-canonical')).toBe(current)
+ await page.locator('#import').setInputFiles(file('slow-error.json'));await page.locator('#undo').click();const undone=await canvas.getAttribute('data-canonical'),feedback=await page.locator('#status').textContent()
+ await page.evaluate(()=>(window as any).rejectRead());expect(await canvas.getAttribute('data-canonical')).toBe(undone);expect(await page.locator('#status').textContent()).toBe(feedback)
+})
 test('keyboard controls, reticle, history and gesture ownership',async({page})=>{
  await page.goto('lab3d.html');const canvas=page.locator('canvas'),raw=()=>canvas.getAttribute('data-canonical')
  await canvas.focus();const empty=await raw();await page.keyboard.press('Enter');expect(await raw()).toBe(empty)
