@@ -146,3 +146,5 @@ button:disabled { opacity:.38; cursor:default; }
   .masthead:has(#settings-save-warning:not(:empty)) { flex-wrap:wrap; }
   #settings-save-warning:not(:empty) { flex-basis:100%; min-width:0; overflow-wrap:anywhere; }
 }
+/* Quiet optional experiment, deliberately outside Artwork actions. */
+.lab-link { display: block; margin-top: 12px; color: var(--ink-soft, #616862); font-size: 12px; text-underline-offset: 3px; }

@@ -72,6 +72,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <section class="tool-group history-group"><h2>Edit</h2><div class="edit-row"><button class="soft-button" id="undo" type="button" disabled aria-label="Undo last puncture">↶ <span>Undo</span></button><button class="soft-button" id="redo" type="button" disabled aria-label="Redo last puncture">↷ <span>Redo</span></button></div><button class="clear-button" id="clear" type="button" disabled>Clear fabric</button></section>
         <section class="tool-group artwork-group"><h2>Artwork</h2><div class="artwork-actions"><div class="artwork-action-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><div class="artwork-action-row"><button class="soft-button" id="leaf-guide" type="button">Stitch a flower</button></div></div><p id="guide-copy" hidden></p></section>
         <div class="quiet-tip" role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true">✦</span><p><strong id="status-title">Needle ready</strong><br><span id="status-copy">Move the front-side needle, then click to puncture.</span></p></div>
+        <a class="lab-link" href="${import.meta.env.BASE_URL}lab3d.html">3D Lab — Experimental</a>
       </aside>
     </section>
   </main>`
