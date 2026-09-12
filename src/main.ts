@@ -4,7 +4,7 @@ import { localize, locale, setText, switchLocale, t } from './i18n'
 import { guideTargets, guidePattern, startGuide, guideStep, loadGuide, nearGuideTarget, saveGuide, type GuideSession } from './leaf-guide'
 import { punctureGuideStep } from './guide-pattern'
 import { FLOWER } from './flower-pattern'
-import { TULIP_HEART_PATTERN } from './tulip-heart-pattern'
+import { PATTERN_LIBRARY, libraryPattern } from './pattern-library'
 import { loadTulipGuide, saveTulipGuide, startTulipGuide, tulipGuideAction } from './tulip-heart-guide'
 import { TouchRotation } from './touch-rotation'
 import { EmbroideryRenderer, type StitchMotion, type TransientThreadVisual } from './renderer'
@@ -71,6 +71,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <details class="tool-group lighting-options"><summary>Appearance</summary><label for="studio-lighting">Lighting</label><select id="studio-lighting" aria-describedby="lighting-help">${STUDIO_LIGHTING_OPTIONS.map(option => `<option value="${option.id}"${option.id === studioLightingId(settings.lightingId) ? ' selected' : ''}>${option.label}</option>`).join('')}</select><p id="lighting-help">Screen lighting only; PNG images always use soft daylight.</p></details>
         <section class="tool-group history-group"><h2>Edit</h2><div class="edit-row"><button class="soft-button" id="undo" type="button" disabled aria-label="Undo last puncture">↶ <span>Undo</span></button><button class="soft-button" id="redo" type="button" disabled aria-label="Redo last puncture">↷ <span>Redo</span></button></div><button class="clear-button" id="clear" type="button" disabled>Clear fabric</button></section>
         <section class="tool-group artwork-group"><h2>Artwork</h2><div class="artwork-actions"><div class="artwork-action-row"><button class="soft-button" id="export-artwork" type="button">Export</button><button class="soft-button" id="import-artwork" type="button">Import</button><input id="artwork-file" type="file" accept=".json,application/json" aria-label="Choose an artwork file" hidden></div><div class="artwork-action-row"><button class="soft-button" id="leaf-guide" type="button">Stitch a flower</button></div></div><p id="guide-copy" hidden></p></section>
+        <details class="tool-group pattern-options"><summary>What would you like to stitch?</summary><label for="pattern-choice">Choose a pattern</label><select id="pattern-choice">${PATTERN_LIBRARY.map(pattern=>`<option value="${pattern.id}">${pattern.title}</option>`).join('')}</select><div class="pattern-actions"><div class="artwork-action-row"><button class="soft-button" id="start-pattern" type="button">Start pattern</button><button class="soft-button" id="exit-pattern" type="button" disabled>Exit guide</button></div></div><p>Optional guides. Your existing stitches stay.</p></details>
         <div class="quiet-tip" role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true">✦</span><p><strong id="status-title">Needle ready</strong><br><span id="status-copy">Move the front-side needle, then click to puncture.</span></p></div>
       </aside>
     </section>
@@ -160,11 +161,18 @@ const guideCopy = document.querySelector<HTMLElement>('#guide-copy')!
 const tulipButton=document.createElement('button')
 tulipButton.id='tulip-heart-guide';tulipButton.type='button';tulipButton.className='soft-button'
 setText(tulipButton,'Tulip & heart');guideButton.after(tulipButton)
+const patternChoice=document.querySelector<HTMLSelectElement>('#pattern-choice')!
+const startPatternButton=document.querySelector<HTMLButtonElement>('#start-pattern')!
+const exitPatternButton=document.querySelector<HTMLButtonElement>('#exit-pattern')!
 const guideMarker = document.createElement('span')
 guideMarker.id = 'guide-target'; guideMarker.setAttribute('aria-hidden', 'true'); guideMarker.hidden = true; hoopShell.append(guideMarker)
 function refreshGuide(): void {
   tulipAction=tulipGuide?tulipGuideAction(runHistory.present,tulipGuide):null
   if(tulipGuide&&!tulipAction){tulipGuide=null;saveTulipGuide(null)}
+  if(tulipAction?.color&&color!==tulipAction.color){
+    if(!palette.querySelector(`.swatch[data-color="${tulipAction.color}"]`))appendCustomSwatch(tulipAction.color)
+    selectColor(tulipAction.color,false)
+  }
   const step = guide ? guideStep(history.present, guide,runHistory.present) : null
   if (guide && step === null) { guide = null; saveGuide(null) }
   guideIndex = step ?? 0
@@ -177,14 +185,20 @@ function refreshGuide(): void {
   if (guide) setText(guideCopy, guideIndex === total ? FLOWER.completion : `Flower step ${guideIndex + 1} of ${total}`)
   setText(tulipButton,tulipGuide?'Exit guide':'Tulip & heart')
   guideButton.disabled=!!tulipGuide;tulipButton.disabled=!!guide
+  startPatternButton.disabled=!!guide||!!tulipGuide
+  patternChoice.disabled=startPatternButton.disabled
+  if(guide)patternChoice.value=FLOWER.id
+  else if(tulipGuide)patternChoice.value=tulipGuide.patternId
+  exitPatternButton.disabled=!startPatternButton.disabled
   updateTulipCopy()
 }
 function updateTulipCopy():void {
   if(!tulipAction)return
   guideCopy.hidden=false
   const a=tulipAction
-  const text=a.kind==='done'?'Tulip and heart complete':a.kind==='cut'?'Cut thread to continue'
-    :visibleSurface(viewController.snapshot())!==a.side?(a.side==='back'?'Flip to the back for the heart':'Return to the front for the tulip')
+  const pattern=tulipGuide?libraryPattern(tulipGuide.patternId):undefined
+  const text=a.kind==='done'?pattern!.presentation.completion:a.kind==='cut'?'Cut thread to continue'
+    :visibleSurface(viewController.snapshot())!==a.side?(pattern?.id==='tulip-heart-v1'?(a.side==='back'?'Flip to the back for the heart':'Return to the front for the tulip'):(a.side==='back'?'Turn to the back to continue':'Turn to the front to continue'))
     :a.kind==='start'?'Start a new thread at the highlighted point':'Puncture the highlighted point, then cut'
   setText(guideCopy,text)
   hoopShell.dataset.tulipAction=a.kind;hoopShell.dataset.tulipStep=String(a.index)
@@ -193,7 +207,7 @@ tulipButton.addEventListener('click',()=>{
   cancelNeedleInteraction(false)
   tulipGuide=tulipGuide?null:startTulipGuide(runHistory.present)
   if(tulipGuide){
-    const guideColor=TULIP_HEART_PATTERN.runs[0]!.color
+    const guideColor=libraryPattern(tulipGuide.patternId)!.runs[0]!.color
     if(!palette.querySelector(`.swatch[data-color="${guideColor}"]`))appendCustomSwatch(guideColor)
     selectColor(guideColor,false)
   }
@@ -203,6 +217,20 @@ guideButton.addEventListener('click', () => {
   if (guide) { guide = null; announce('Guide paused', 'Your stitches remain on the fabric.') }
   else { guide = startGuide(history.present, color); announce(FLOWER.entry, 'Follow the next highlighted point. Existing stitches stay when you exit.') }
   saveGuide(guide); refreshGuide(); render()
+})
+startPatternButton.addEventListener('click',()=>{
+  if(startPatternButton.disabled)return
+  const content=PATTERN_LIBRARY.find(pattern=>pattern.id===patternChoice.value)
+  if(!content)return
+  cancelNeedleInteraction(false)
+  if(content.kind==='flower'){guide=startGuide(history.present,color);saveGuide(guide)}
+  else {tulipGuide=startTulipGuide(runHistory.present,content.id);saveTulipGuide(tulipGuide)}
+  refreshGuide();render()
+})
+exitPatternButton.addEventListener('click',()=>{
+  cancelNeedleInteraction(false)
+  guide=null;tulipGuide=null;saveGuide(null);saveTulipGuide(null)
+  refreshGuide();render();announce('Guide paused','Your stitches remain on the fabric.')
 })
 
 function refreshRenderItems(): void {
@@ -641,7 +669,7 @@ hoopShell.addEventListener('pointerup', (event) => {
   stopActiveThreadLoop()
   let nextState:ThreadRunState, validatedRaw:string
   try {
-    nextState = tulipAction && 'target' in tulipAction ? punctureGuideStep(runHistory.present,TULIP_HEART_PATTERN,tulipAction.index,point,'running')
+    nextState = tulipAction && 'target' in tulipAction ? punctureGuideStep(runHistory.present,libraryPattern(tulipGuide!.patternId)!,tulipAction.index,point,'running')
     : guide && guideTarget ? punctureGuideStep(runHistory.present,guidePattern(guide),guideIndex,point,stitchType)
     : punctureThreadRun(runHistory.present, point, { type: stitchType, color })
     validatedRaw=serializeThreadArtwork(nextState)
@@ -698,7 +726,7 @@ motionButton.addEventListener('click', () => {
   announce(settings.motionEnabled ? 'Stitch motion on' : 'Stitch motion off', settings.motionEnabled ? 'Punctures tighten from the loose thread you are moving.' : 'Live thread following remains; punctures settle immediately.')
 })
 function restoreActiveColor():void{
-  const run=activeThreadRun(runHistory.present),value=run?.color??(run?history.present.punctures.at(-1)?.color:tulipGuide?TULIP_HEART_PATTERN.runs[0]!.color:null)
+  const run=activeThreadRun(runHistory.present),value=run?.color??(run?history.present.punctures.at(-1)?.color:tulipGuide?libraryPattern(tulipGuide.patternId)?.runs[0]?.color:null)
   if(value){if(!palette.querySelector(`.swatch[data-color="${value}"]`))appendCustomSwatch(value);selectColor(value,false)}
 }
 undoButton.addEventListener('click', () => { cancelNeedleInteraction(false); syncThreadHistory(undoThreadHistory(runHistory)); restoreActiveColor(); resetTransientToNeedle(false); refreshRenderItems(); persist(); syncViewControl(); render(); announce('Operation undone', `Needle restored to the ${history.present.needle.side}.`) })

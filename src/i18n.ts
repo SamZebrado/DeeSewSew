@@ -9,6 +9,11 @@ try { storage = localStorage } catch { /* Restricted browser. */ }
 export let locale: Locale = initialLocale(storage, () => navigator.language)
 /** English message IDs are readable at call sites; artwork never contains these IDs. */
 export const messages: Record<string, string> = {
+  'What would you like to stitch?':'想绣什么？', 'Choose a pattern':'选择图案', 'Start pattern':'开始绣这个图案',
+  'Optional guides. Your existing stitches stay.':'按喜好选择引导，已有绣线会保留。',
+  'Little leaf':'小叶片', 'Two cherries':'两颗樱桃',
+  'Pattern complete. Your stitches are yours to keep.':'图案完成，绣线已留在你的作品中。',
+  'Turn to the back to continue':'转到背面继续', 'Turn to the front to continue':'转到正面继续',
   'Ctrl + click the fabric to cut thread': 'Ctrl + 点击绣布可剪线',
   'Cut thread (Ctrl + click fabric)': '剪线（Ctrl + 点击绣布）',
   'Save PNG image': '保存 PNG 图片', 'Front PNG': '正面 PNG', 'Back PNG': '背面 PNG', 'Both PNG': '双面 PNG',
