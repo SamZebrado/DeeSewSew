@@ -41,6 +41,7 @@ test('generic executor supports longer runs and derives face from content rather
   for(let i=0;i<3;i++){
     const a=runGuideAction(state,pattern,1)!
     expect(a.kind).toBe(i===0?'start':'puncture');expect(a.side).toBe('back')
+    expect(a.cutAfter).toBe(i===2)
     state=punctureGuideStep(state,pattern,i,a.target!,'running')
     if(i===0)expect(runGuideAction(endThreadRun(state),pattern,1)).toBeNull()
   }
@@ -54,6 +55,6 @@ test('guide version rejects changed/unknown content, narrowly accepts old tulip 
   expect(load({version:1,patternId:'tulip-heart-v1',startOrder:1})).toMatchObject({patternVersion:1})
   const session=startTulipGuide(state,LEAF_PATTERN.id)
   expect(load(session)).toEqual(session)
-  for(const bad of [{...session,patternVersion:2},{...session,patternVersion:undefined},{...session,patternId:'unknown'},{...session,startOrder:2},{...session,startOrder:-1}])expect(load(bad)).toBeNull()
+  for(const bad of [{...session,patternVersion:2},{...session,patternVersion:undefined},{...session,patternVersion:null,patternId:'tulip-heart-v1'},{...session,patternId:'unknown'},{...session,startOrder:2},{...session,startOrder:-1}])expect(load(bad)).toBeNull()
   expect(serializeThreadArtwork(state)).toBe(before)
 })

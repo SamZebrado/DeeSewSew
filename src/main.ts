@@ -199,7 +199,7 @@ function updateTulipCopy():void {
   const pattern=tulipGuide?libraryPattern(tulipGuide.patternId):undefined
   const text=a.kind==='done'?pattern!.presentation.completion:a.kind==='cut'?'Cut thread to continue'
     :visibleSurface(viewController.snapshot())!==a.side?(pattern?.id==='tulip-heart-v1'?(a.side==='back'?'Flip to the back for the heart':'Return to the front for the tulip'):(a.side==='back'?'Turn to the back to continue':'Turn to the front to continue'))
-    :a.kind==='start'?'Start a new thread at the highlighted point':'Puncture the highlighted point, then cut'
+    :a.kind==='start'?'Start a new thread at the highlighted point':a.cutAfter?'Puncture the highlighted point, then cut':'Puncture the highlighted point'
   setText(guideCopy,text)
   hoopShell.dataset.tulipAction=a.kind;hoopShell.dataset.tulipStep=String(a.index)
 }

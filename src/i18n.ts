@@ -14,6 +14,7 @@ export const messages: Record<string, string> = {
   'Little leaf':'小叶片', 'Two cherries':'两颗樱桃',
   'Pattern complete. Your stitches are yours to keep.':'图案完成，绣线已留在你的作品中。',
   'Turn to the back to continue':'转到背面继续', 'Turn to the front to continue':'转到正面继续',
+  'Puncture the highlighted point':'在高亮点落针',
   'Ctrl + click the fabric to cut thread': 'Ctrl + 点击绣布可剪线',
   'Cut thread (Ctrl + click fabric)': '剪线（Ctrl + 点击绣布）',
   'Save PNG image': '保存 PNG 图片', 'Front PNG': '正面 PNG', 'Back PNG': '背面 PNG', 'Both PNG': '双面 PNG',

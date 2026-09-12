@@ -21,7 +21,7 @@ export function loadTulipGuide(state:ThreadRunState):TulipGuideSession|null {
     const s=JSON.parse(localStorage.getItem(TULIP_GUIDE_KEY)??'null')
     if(!s||s.version!==1||typeof s.patternId!=='string'||!libraryPattern(s.patternId)||!Number.isSafeInteger(s.startOrder)||s.startOrder<1)return null
     // Only the published v1 tulip session predates explicit content versioning.
-    const patternVersion=s.patternVersion??(s.patternId==='tulip-heart-v1'?1:null)
+    const patternVersion=s.patternVersion===undefined?(s.patternId==='tulip-heart-v1'?1:null):s.patternVersion
     if(patternVersion!==libraryPattern(s.patternId)!.version)return null
     const session:TulipGuideSession={version:1,patternId:s.patternId,patternVersion,startOrder:s.startOrder}
     return tulipGuideAction(state,session)?session:null

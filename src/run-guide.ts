@@ -19,5 +19,5 @@ export function runGuideAction(state:ThreadRunState,pattern:GuidePattern,startOr
   if(!step.boundary&&!active)return null
   const run=pattern.runs.find(run=>run.id===step.runId)!
   // Explicit support face is content, not an index threshold tied to one motif.
-  return {kind:step.boundary?'start' as const:'puncture' as const,index,target:step.target,side:run.visibleSide!,color:step.color}
+  return {kind:step.boundary?'start' as const:'puncture' as const,index,target:step.target,side:run.visibleSide!,color:step.color,cutAfter:!steps[index+1]||steps[index+1]!.boundary}
 }
