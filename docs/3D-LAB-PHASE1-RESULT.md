@@ -1,0 +1,58 @@
+# 3D Lab Phase 1 proof — FIX_FIRST for publication
+
+Local-only isolated candidate. No Bridge, push, production migration or approval.
+ADR committed first at 7543300. The lab uses one sphere, one ordered contact run,
+32 anchor maximum, 24 sampled edges per span. Every anchor is a unit local Vec3;
+its world position is local + canonical support translation. Camera orbits the
+support origin (translation therefore cancels when constructing camera-relative
+coordinates); transform is never rewritten by camera/removal. This first shape
+is rotationally symmetric and has no orientation/scale editing.
+
+`/DeeSewSew/lab3d.html`: camera-only by default; explicit Thread tool click starts
+or extends a surface-laid run. Drag always orbits, never edits; zoom is 2–7 radii.
+Analytic ray/sphere intersection, perspective projection, front-surface occlusion
+and depth sorting all use spatial geometry. Great-circle spans are intentionally
+supported surface paths, not fake projected 2D artwork or straight fabric stitches.
+
+Removal hides the support and deactivates contact editing without deleting support
+or attachments. Reinstallation is exact. The artistic rest pose is currently
+static; no material stiffness or real-silk equilibrium is asserted. No transient
+solver, oscillation, 3D puncture penetration, cut UI, knots or free-space physics.
+These distinctions are visible on the page. This is a coherent small geometry /
+interaction proof, not "3D embroidery complete".
+
+## Verified locally
+
+- Typecheck, build: PASS. 201 unit tests / 34 files PASS, including five new lab
+  tests. Parser rejects lab/public cross-format input, invalid vectors/transforms,
+  large files, coincident/antipodal adjacent anchors and >32-anchor runs.
+- Real installed Chrome headless interaction recording via
+  `node scripts/lab3d-evidence.mjs`, own server 4193: PASS. Default clicks do not
+  edit; four clicks produce four spatial anchors; real drag does not change
+  canonical state; removed support cannot receive edits; orbit after removal;
+  reinstall equality; local save/reload equality; malformed load preserves state;
+  nonidentity [2,-3,4] support remove/reinstall/save/reload equality; no page errors.
+- Normal storage isolation browser check is a separate sentinel only, NOT a real
+  v4 production UI roundtrip. Source imports/storage keys are separate and unit
+  boundary test proves existing public parser rejects the lab format.
+- Evidence: `review/lab3d-phase1/{installed,orbit,removed,restored}.png`, continuous
+  WebM and result.json. Removed screenshot visually inspected: spatial arc form
+  changes with camera, although depth without support is still visually sparse.
+- Work is bounded to <=744 sampled edges, draw-on-change only, no RAF/idle solver.
+  This is a code bound, not a measured GPU/mobile/FPS performance claim.
+- First browser launch failed because bundled Chromium was absent; installed
+  Chrome succeeded. No browser download. Test browser closed in finally; own
+  server stopped after evidence. No Playwright MCP launched; sandbox ps denied,
+  no unrelated process cleanup attempted.
+
+## Remaining release gates
+
+Independent architecture/visual inspection, real production v4 unaffected smoke,
+full relevant 2D regression, strict public experimental UX/localization/accessibility,
+offline handling for multipage entry, measured bounded browser performance, and
+High exact-SHA approval. Multipage build currently bundles an entry; production
+main has no link and no runtime lab import. The existing service worker generator
+must be audited before publication (do not assume direct lab offline route works).
+No public readiness claim based on unit mathematics alone. Static artistic rest
+shape is useful proof but needs judgment on whether a small restrained transient
+display relaxation is necessary to avoid a wire-like visual before release.
