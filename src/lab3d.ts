@@ -1,4 +1,4 @@
-import { add, anchor, displayPoint, emptyLab, parseLab, pick, project, scale, serializeLab, span, toggleSupport, worldAnchor, type Camera, type LabArtwork, type Vec3 } from './lab3d-model'
+import { add, anchor, createImportOwnership, displayPoint, emptyLab, parseLab, pick, project, scale, serializeLab, span, toggleSupport, worldAnchor, type Camera, type LabArtwork, type Vec3 } from './lab3d-model'
 import './lab3d.css'
 
 document.querySelector('#lab')!.innerHTML = `<header><h1>3D Lab — Experimental / 实验室</h1><p>Desktop-first sphere study. Surface-laid thread, not through-fabric stitching.</p><p>Drag to orbit · Wheel to zoom · Click in Thread tool to place a 3D anchor.</p></header><nav><button id="tool">Thread tool / 放线</button><button id="support">Remove support / 移除支撑</button><button id="undo">Undo</button><button id="redo">Redo</button><button id="save">Save lab</button><button id="load">Load lab</button><button id="download">Export lab JSON</button><label>Import lab <input id="import" type="file" accept=".json"></label></nav><p id="status" role="status"></p><canvas aria-label="Experimental sphere and spatial thread" tabindex="0"></canvas><p>Artistic rest-shape display constraint / 艺术性静止造型：removed support preserves the intentional rest pose. Not a real silk equilibrium simulation. Separate experimental data; normal artwork is never read or written.</p>`
@@ -6,6 +6,7 @@ const canvas=document.querySelector('canvas')!, ctx=canvas.getContext('2d')!
 const status=document.querySelector<HTMLElement>('#status')!
 let artwork=emptyLab(), camera:Camera={yaw:0,pitch:0.15,distance:3.5}, editing=false
 let past:LabArtwork[]=[], future:LabArtwork[]=[]
+const importOwnership=createImportOwnership()
 const key='deesewsew.experimental.sphere.v1'
 let width=800,height=550
 let releaseAt:number|null=null, frame:number|null=null
@@ -38,16 +39,25 @@ function draw() {
   canvas.dataset.canonical=serializeLab(artwork)
   canvas.dataset.camera=JSON.stringify(camera)
 }
-function commit(next:LabArtwork){if(next===artwork)return;stopDisplay();past=[...past.slice(-63),artwork];future=[];artwork=next;status.textContent=`${artwork.run?.anchors.length??0}/32 anchors · ${artwork.support.state}`;draw()}
+function commit(next:LabArtwork){if(next===artwork)return;importOwnership.invalidate();stopDisplay();past=[...past.slice(-63),artwork];future=[];artwork=next;status.textContent=`${artwork.run?.anchors.length??0}/32 anchors · ${artwork.support.state}`;draw()}
 function safe(fn:()=>void){try{fn()}catch(e){status.textContent=e instanceof Error?e.message:'Lab operation failed'}}
 document.querySelector('#tool')!.addEventListener('click',()=>{editing=!editing;document.querySelector('#tool')!.textContent=editing?'Camera tool / 查看':'Thread tool / 放线';status.textContent=editing?'Click sphere to start / extend the run. Drag still orbits.':'Camera only: clicks never edit.'})
 document.querySelector('#support')!.addEventListener('click',()=>{commit(toggleSupport(artwork));if(artwork.support.state==='removed'&&artwork.run&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.hidden){releaseAt=performance.now();frame=requestAnimationFrame(animate)}})
-document.querySelector('#undo')!.addEventListener('click',()=>{if(!past.length)return;stopDisplay();future.push(artwork);artwork=past.pop()!;draw()})
-document.querySelector('#redo')!.addEventListener('click',()=>{if(!future.length)return;stopDisplay();past.push(artwork);artwork=future.pop()!;draw()})
+document.querySelector('#undo')!.addEventListener('click',()=>{if(!past.length)return;importOwnership.invalidate();stopDisplay();future.push(artwork);artwork=past.pop()!;draw()})
+document.querySelector('#redo')!.addEventListener('click',()=>{if(!future.length)return;importOwnership.invalidate();stopDisplay();past.push(artwork);artwork=future.pop()!;draw()})
 document.querySelector('#save')!.addEventListener('click',()=>safe(()=>{localStorage.setItem(key,serializeLab(artwork));status.textContent='Experimental lab saved locally.'}))
 document.querySelector('#load')!.addEventListener('click',()=>safe(()=>commit(parseLab(localStorage.getItem(key)??''))))
 document.querySelector('#download')!.addEventListener('click',()=>safe(()=>{const url=URL.createObjectURL(new Blob([serializeLab(artwork)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='sphere.deesewsew-lab3d.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}))
-document.querySelector<HTMLInputElement>('#import')!.addEventListener('change',async e=>{const input=e.target as HTMLInputElement,file=input.files?.[0];if(!file)return;try{if(file.size>16000)throw Error('Lab file too large');commit(parseLab(await file.text()))}catch(e){status.textContent=String(e)}finally{input.value=''}})
+document.querySelector<HTMLInputElement>('#import')!.addEventListener('change',async e=>{
+  const input=e.target as HTMLInputElement,file=input.files?.[0];if(!file)return
+  const token=importOwnership.start()
+  try{
+    if(file.size>16000)throw Error('Lab file too large')
+    const raw=await file.text()
+    if(!importOwnership.owns(token))return
+    input.value='';commit(parseLab(raw))
+  }catch(e){if(importOwnership.owns(token)){input.value='';status.textContent=String(e)}}
+})
 let gesture:{id:number;x:number;y:number;lastX:number;lastY:number;drag:boolean}|null=null
 canvas.addEventListener('pointerdown',e=>{if(gesture||e.button!==0)return;gesture={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,drag:false};canvas.setPointerCapture(e.pointerId)})
 canvas.addEventListener('pointermove',e=>{if(!gesture||gesture.id!==e.pointerId)return;gesture.drag ||= Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)>5;if(gesture.drag){camera={...camera,yaw:camera.yaw+(e.clientX-gesture.lastX)*.008,pitch:Math.max(-1.4,Math.min(1.4,camera.pitch+(e.clientY-gesture.lastY)*.008))};draw()}gesture.lastX=e.clientX;gesture.lastY=e.clientY})

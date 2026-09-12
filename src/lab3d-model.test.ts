@@ -1,7 +1,16 @@
 import { describe,it,expect } from 'vitest'
-import { anchor,displayPoint,emptyLab,parseLab,pick,project,serializeLab,span,toggleSupport,worldAnchor } from './lab3d-model'
+import { anchor,createImportOwnership,displayPoint,emptyLab,parseLab,pick,project,serializeLab,span,toggleSupport,worldAnchor } from './lab3d-model'
 import { parseThreadArtwork } from './thread-run-storage'
 describe('bounded independent sphere lab',()=>{
+  it('invalidates delayed imports after newer imports and canonical edits',async()=>{
+    const gate=createImportOwnership();let current='original',resolveA!:(s:string)=>void
+    const a=new Promise<string>(resolve=>{resolveA=resolve}),tokenA=gate.start()
+    const completion=a.then(raw=>{if(gate.owns(tokenA))current=raw})
+    const tokenB=gate.start();if(gate.owns(tokenB)){current='newer';gate.invalidate()}
+    resolveA('older');await completion;expect(current).toBe('newer')
+    const pending=gate.start();gate.invalidate();expect(gate.owns(pending)).toBe(false)
+    expect(current).toBe('newer')
+  })
   it('artistic relaxation is bounded, endpoint exact and cadence independent',()=>{
     const p:[number,number,number]=[0,0,1]
     expect(displayPoint(p,.5,0)).toBe(p);expect(displayPoint(p,.5,1200)).toBe(p)

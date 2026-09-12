@@ -67,3 +67,8 @@ The multipage build already precaches lab3d.html and assets. Direct lab entry mu
 register the existing worker in production so first-visit offline reload works;
 no worker source/schema/cache-policy fork. Test first-entry lab offline then main
 v4 UI real stitching/save, lab invalid load, return to actual main artwork intact.
+
+Async-import ownership decision: every new import and canonical edit invalidates
+the previous read token. A resolved read can replace state or report errors only
+while its token still owns the current revision. Stale success/error is silent;
+undo/redo/load/edit remain authoritative. No background storage write is added.

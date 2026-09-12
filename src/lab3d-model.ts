@@ -47,6 +47,10 @@ export function parseLab(raw: string): LabArtwork {
 }
 export const serializeLab = (a: LabArtwork) => JSON.stringify(parseLab(JSON.stringify(a)))
 export const worldAnchor = (a: LabArtwork, p: Vec3): Vec3 => add(p,a.support.transform)
+export function createImportOwnership() {
+  let revision=0
+  return { start:()=>++revision, invalidate:()=>{revision++}, owns:(token:number)=>token===revision }
+}
 /** Artistic, bounded radial release response; not a material/force solver. */
 export function displayPoint(rest: Vec3, material: number, elapsedMs: number): Vec3 {
   if(elapsedMs<=0 || elapsedMs>=1200)return rest
