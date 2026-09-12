@@ -1,5 +1,13 @@
 # 3D Lab Phase 1 proof — FIX_FIRST for publication
 
+## Current handoff: localized UX slice
+
+See `3D-LAB-UX-RESULT.md` for the current source-bound UX result (runtime candidate
+84fa39f). The sections below preserve the earlier c982503 geometry proof and must
+not be read as final UX or release approval. Full 92/65/2 inherited regression
+passed at frozen c982503; the localized follow-up has its own 8 focused browser
+tests and still requires main integration/full final gates on the Pattern base.
+
 Local-only isolated candidate. No Bridge, push, production migration or approval.
 
 ## Final follow-up validation — 2026-09-12
