@@ -2,6 +2,39 @@
 
 Local-only isolated candidate. No Bridge, push, production migration or approval.
 
+## Final follow-up validation — 2026-09-12
+
+Current follow-up supersedes the historical static/sentinel-only notes below.
+Final build/typecheck and 203 unit tests / 34 files pass. Focused production Chrome
+continuous interaction and actual-v4 offline tests pass on final runtime sources.
+Additional real keyboard/mouse checks: Escape cancels pending click, changing tool
+via keyboard while held cancels, undo while held cannot create a stale release
+anchor, wheel while held never edits. Canonical changes and hidden state cancel
+pending gestures. Controlled delayed File.text proves older A cannot overwrite B
+or edits made during reading. Ownership covers errors too; stale errors are silent.
+
+Final isolated CPU profile (5 warmups, 21 samples; headless installed Chrome,
+1200×960; 32 anchors): actual pointerup picking+commit+canvas submission median
+1.1 ms / p95 1.4 ms / max 1.5 ms; synthetic wheel+draw median 1.2 ms / p95 1.4 ms /
+max 1.5 ms. Raw `profile.json`. Includes serialization/debug data attributes and
+CPU command submission; NOT GPU/compositor completion, mobile, FPS or power.
+Display frame counter stops after 1.2 seconds and remains unchanged for 400 ms;
+reduced-motion removal produces no ongoing frames. Canonical equality verified.
+
+Final continuous recording: `review/lab3d-phase1/page@b9723dcdc508fec784620295b6afa793.webm`.
+Final installed screenshot visually inspected; sparse spatial thread bends around
+the sphere and changes projection under orbit. This is still an experimental
+geometry study, not final embroidery material styling or physical silk dynamics.
+`result.json`, `offline-result.json`, PNGs and `profile.json` are the final evidence.
+All owned browsers closed and preview 4194 stopped. No user browser disturbed.
+
+Remaining before public experimental release: integrator independent review,
+full applicable 2D regression at constructed release SHA, chosen discovery/link,
+accessibility/localization/product-polish judgment and High exact-SHA approval.
+No new production topology/schema changes. No claim that this subtask independently
+authorizes publication. Recommended classification: coherent Phase-1 proof ready
+for integrator review; FIX_FIRST for a public release package.
+
 ## Follow-up implementation (supersedes static-display limitations below)
 
 The follow-up introduces a 1.2-second analytical artistic radial response only

@@ -39,12 +39,12 @@ function draw() {
   canvas.dataset.canonical=serializeLab(artwork)
   canvas.dataset.camera=JSON.stringify(camera)
 }
-function commit(next:LabArtwork){if(next===artwork)return;importOwnership.invalidate();stopDisplay();past=[...past.slice(-63),artwork];future=[];artwork=next;status.textContent=`${artwork.run?.anchors.length??0}/32 anchors · ${artwork.support.state}`;draw()}
+function commit(next:LabArtwork){if(next===artwork)return;gesture=null;importOwnership.invalidate();stopDisplay();past=[...past.slice(-63),artwork];future=[];artwork=next;status.textContent=`${artwork.run?.anchors.length??0}/32 anchors · ${artwork.support.state}`;draw()}
 function safe(fn:()=>void){try{fn()}catch(e){status.textContent=e instanceof Error?e.message:'Lab operation failed'}}
-document.querySelector('#tool')!.addEventListener('click',()=>{editing=!editing;document.querySelector('#tool')!.textContent=editing?'Camera tool / 查看':'Thread tool / 放线';status.textContent=editing?'Click sphere to start / extend the run. Drag still orbits.':'Camera only: clicks never edit.'})
+document.querySelector('#tool')!.addEventListener('click',()=>{gesture=null;editing=!editing;document.querySelector('#tool')!.textContent=editing?'Camera tool / 查看':'Thread tool / 放线';status.textContent=editing?'Click sphere to start / extend the run. Drag still orbits.':'Camera only: clicks never edit.'})
 document.querySelector('#support')!.addEventListener('click',()=>{commit(toggleSupport(artwork));if(artwork.support.state==='removed'&&artwork.run&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.hidden){releaseAt=performance.now();frame=requestAnimationFrame(animate)}})
-document.querySelector('#undo')!.addEventListener('click',()=>{if(!past.length)return;importOwnership.invalidate();stopDisplay();future.push(artwork);artwork=past.pop()!;draw()})
-document.querySelector('#redo')!.addEventListener('click',()=>{if(!future.length)return;importOwnership.invalidate();stopDisplay();past.push(artwork);artwork=future.pop()!;draw()})
+document.querySelector('#undo')!.addEventListener('click',()=>{if(!past.length)return;gesture=null;importOwnership.invalidate();stopDisplay();future.push(artwork);artwork=past.pop()!;draw()})
+document.querySelector('#redo')!.addEventListener('click',()=>{if(!future.length)return;gesture=null;importOwnership.invalidate();stopDisplay();past.push(artwork);artwork=future.pop()!;draw()})
 document.querySelector('#save')!.addEventListener('click',()=>safe(()=>{localStorage.setItem(key,serializeLab(artwork));status.textContent='Experimental lab saved locally.'}))
 document.querySelector('#load')!.addEventListener('click',()=>safe(()=>commit(parseLab(localStorage.getItem(key)??''))))
 document.querySelector('#download')!.addEventListener('click',()=>safe(()=>{const url=URL.createObjectURL(new Blob([serializeLab(artwork)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='sphere.deesewsew-lab3d.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}))
@@ -63,7 +63,8 @@ canvas.addEventListener('pointerdown',e=>{if(gesture||e.button!==0)return;gestur
 canvas.addEventListener('pointermove',e=>{if(!gesture||gesture.id!==e.pointerId)return;gesture.drag ||= Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)>5;if(gesture.drag){camera={...camera,yaw:camera.yaw+(e.clientX-gesture.lastX)*.008,pitch:Math.max(-1.4,Math.min(1.4,camera.pitch+(e.clientY-gesture.lastY)*.008))};draw()}gesture.lastX=e.clientX;gesture.lastY=e.clientY})
 canvas.addEventListener('pointerup',e=>{if(!gesture||gesture.id!==e.pointerId)return;const click=!gesture.drag&&Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)<=5;gesture=null;if(!click||!editing)return;safe(()=>{const r=canvas.getBoundingClientRect(),f=Math.min(width,height)*1.25,p=pick((e.clientX-r.left-width/2)/f,(e.clientY-r.top-height/2)/f,{...camera,target:artwork.support.transform});if(p)commit(anchor(artwork,add(p,scale(artwork.support.transform,-1))))})})
 canvas.addEventListener('pointercancel',()=>{gesture=null});canvas.addEventListener('lostpointercapture',()=>{gesture=null});window.addEventListener('blur',()=>{gesture=null})
-document.addEventListener('visibilitychange',()=>{if(document.hidden){stopDisplay();draw()}})
+document.addEventListener('visibilitychange',()=>{if(document.hidden){gesture=null;stopDisplay();draw()}})
+window.addEventListener('keydown',e=>{if(e.key==='Escape')gesture=null})
 window.addEventListener('pagehide',stopDisplay)
 canvas.addEventListener('wheel',e=>{e.preventDefault();if(gesture)gesture.drag=true;camera={...camera,distance:Math.max(2,Math.min(7,camera.distance*Math.exp(Math.max(-100,Math.min(100,e.deltaY))*.002)))};draw()},{passive:false})
 new ResizeObserver(()=>{const r=canvas.getBoundingClientRect();width=r.width;height=r.height;const d=Math.min(2,devicePixelRatio);canvas.width=Math.round(width*d);canvas.height=Math.round(height*d);ctx.setTransform(d,0,0,d,0,0);draw()}).observe(canvas)

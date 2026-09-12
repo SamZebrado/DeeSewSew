@@ -15,6 +15,11 @@ try{
  for(const [dx,dy] of [[-90,-60],[70,-90],[110,70],[-70,95]]){await page.mouse.click(x+dx,y+dy);await page.waitForTimeout(350)}
  const original=await canonical();assert.equal(JSON.parse(original).run.anchors.length,4)
  await page.mouse.move(x,y);await page.mouse.down();await page.mouse.wheel(0,20);await page.mouse.up();assert.equal(await canonical(),original)
+ await page.mouse.move(x,y);await page.mouse.down();await page.keyboard.press('Escape');await page.mouse.up();assert.equal(await canonical(),original)
+ await page.mouse.move(x,y);await page.mouse.down();await page.locator('#tool').focus();await page.keyboard.press('Space');await page.mouse.up();assert.equal(await canonical(),original)
+ await page.locator('#tool').click()
+ await page.mouse.move(x,y);await page.mouse.down();await page.locator('#undo').focus();await page.keyboard.press('Space');const undone=await canonical();await page.mouse.up();assert.equal(await canonical(),undone)
+ await page.locator('#redo').click();assert.equal(await canonical(),original)
  await page.screenshot({path:`${out}/installed.png`})
  await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+240,y+60,{steps:30});await page.mouse.up();assert.equal(await canonical(),original)
  await page.screenshot({path:`${out}/orbit.png`})
