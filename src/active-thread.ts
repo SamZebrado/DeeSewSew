@@ -7,11 +7,13 @@ export interface ActiveThreadState {
   previous: NormalizedPoint[]
   reducedMotion: boolean
   accumulatorMs: number
+  slackScale?: number
 }
 
 export interface ActiveThreadOptions {
   pointCount?: number
   reducedMotion?: boolean
+  slackScale?: number
 }
 
 export const ACTIVE_THREAD_MIN_POINTS = 6
@@ -28,9 +30,13 @@ function safePointCount(value: number | undefined): number {
   return clamp(Math.round(value!), ACTIVE_THREAD_MIN_POINTS, ACTIVE_THREAD_MAX_POINTS)
 }
 
-function initialPoints(anchor: NormalizedPoint, target: NormalizedPoint, count: number, reducedMotion: boolean): NormalizedPoint[] {
+function safeSlackScale(value: number | undefined): number {
+  return Number.isFinite(value) ? clamp(value!, .35, 1.65) : 1
+}
+
+function initialPoints(anchor: NormalizedPoint, target: NormalizedPoint, count: number, reducedMotion: boolean, slackScale = 1): NormalizedPoint[] {
   const distance = Math.hypot(target.x - anchor.x, target.y - anchor.y)
-  const sag = reducedMotion ? Math.min(.009, distance * .018) : Math.min(.038, .01 + distance * .055)
+  const sag = (reducedMotion ? Math.min(.009, distance * .018) : Math.min(.038, .01 + distance * .055)) * slackScale
   return Array.from({ length: count }, (_, index) => {
     const progress = index / (count - 1)
     const point = interpolate(anchor, target, progress)
@@ -42,8 +48,17 @@ export function createActiveThread(anchor: NormalizedPoint, target: NormalizedPo
   if (!finitePoint(anchor) || !finitePoint(target)) throw new TypeError('Active thread endpoints must be finite.')
   const count = safePointCount(options.pointCount)
   const reducedMotion = Boolean(options.reducedMotion)
-  const points = initialPoints(anchor, target, count, reducedMotion)
-  return { anchor: clonePoint(anchor), target: clonePoint(target), points, previous: points.map(clonePoint), reducedMotion, accumulatorMs: 0 }
+  const slackScale = safeSlackScale(options.slackScale)
+  const points = initialPoints(anchor, target, count, reducedMotion, slackScale)
+  const state = { anchor: clonePoint(anchor), target: clonePoint(target), points, previous: points.map(clonePoint), reducedMotion, accumulatorMs: 0 }
+  return slackScale === 1 ? state : { ...state, slackScale }
+}
+
+export function setActiveThreadSlack(state: ActiveThreadState, slackScale: number): ActiveThreadState {
+  const safe = safeSlackScale(slackScale)
+  if (safe === (state.slackScale ?? 1)) return state
+  const { slackScale: _unused, ...rest } = state
+  return safe === 1 ? rest : { ...state, slackScale: safe }
 }
 
 export function retargetActiveThread(state: ActiveThreadState, target: NormalizedPoint): ActiveThreadState {
@@ -77,7 +92,8 @@ function integrateActiveThread(state: ActiveThreadState): ActiveThreadState {
   const damping = state.reducedMotion ? .18 : .76
   // A weak rest-shape spring removes slow constraint creep on short threads.
   // Sag is encoded in this equilibrium rather than injected indefinitely.
-  const rest = initialPoints(state.anchor, state.target, state.points.length, state.reducedMotion)
+  const slackScale = state.slackScale ?? 1
+  const rest = initialPoints(state.anchor, state.target, state.points.length, state.reducedMotion, slackScale)
   const stiffness = state.reducedMotion ? .22 : .06
   const points = state.points.map(clonePoint)
   const previous = state.previous.map(clonePoint)
@@ -96,7 +112,7 @@ function integrateActiveThread(state: ActiveThreadState): ActiveThreadState {
   }
 
   const endpointDistance = Math.hypot(state.target.x - state.anchor.x, state.target.y - state.anchor.y)
-  const slackRatio = state.reducedMotion ? 1.018 : 1.085
+  const slackRatio = 1 + (state.reducedMotion ? .018 : .085) * slackScale
   const segmentLength = Math.max(.0001, endpointDistance * slackRatio / lastIndex)
   const iterations = state.reducedMotion ? 2 : ACTIVE_THREAD_CONSTRAINT_ITERATIONS
   for (let iteration = 0; iteration < iterations; iteration += 1) {
@@ -123,7 +139,7 @@ function integrateActiveThread(state: ActiveThreadState): ActiveThreadState {
   points[lastIndex] = clonePoint(state.target)
   previous[0] = clonePoint(state.anchor)
   previous[lastIndex] = clonePoint(state.target)
-  if (!points.every(finitePoint)) return createActiveThread(state.anchor, state.target, { pointCount: points.length, reducedMotion: state.reducedMotion })
+  if (!points.every(finitePoint)) return createActiveThread(state.anchor, state.target, { pointCount: points.length, reducedMotion: state.reducedMotion, slackScale })
   return { ...state, points, previous }
 }
 

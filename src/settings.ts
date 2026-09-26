@@ -19,6 +19,7 @@ import {
 
 export interface StudioSettings {
   motionEnabled: boolean
+  pressureExperimentEnabled?: boolean
   customColors: string[]
   selectedColor: string
   schemaVersion?: 2
@@ -32,6 +33,7 @@ export interface StudioSettings {
 
 export interface StudioSettingsV2 extends StudioSettings {
   schemaVersion: 2
+  pressureExperimentEnabled: boolean
   customMaterials: CustomThreadMaterialV1[]
   selectedMaterialId: BuiltInThreadMaterialId | string
   lightingId: LightingPresetId
@@ -68,6 +70,7 @@ export function defaultSettings(reducedMotion = false): StudioSettingsV2 {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     motionEnabled: !reducedMotion,
+    pressureExperimentEnabled: false,
     customColors: [],
     selectedColor: DEFAULT_COLOR,
     customMaterials: [],
@@ -115,6 +118,7 @@ function tryDeserializeSettings(raw: string | null, reducedMotion: boolean): Stu
     return {
       schemaVersion: SETTINGS_SCHEMA_VERSION,
       motionEnabled: typeof value.motionEnabled === 'boolean' ? value.motionEnabled : fallback.motionEnabled,
+      pressureExperimentEnabled: value.pressureExperimentEnabled === true,
       customColors,
       selectedColor: normalizeHexColor(value.selectedColor) ?? fallback.selectedColor,
       customMaterials,

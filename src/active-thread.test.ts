@@ -7,6 +7,7 @@ import {
   retargetActiveThread,
   snapshotActiveThread,
   stepActiveThread,
+  setActiveThreadSlack,
   tightenActiveThread,
 } from './active-thread'
 
@@ -14,6 +15,31 @@ const A = { x: .28, y: .36 }
 const B = { x: .68, y: .48 }
 
 describe('bounded active soft thread', () => {
+  it('is exactly equivalent when optional slack is omitted or neutral', () => {
+    let omitted = createActiveThread(A, B)
+    let neutral = createActiveThread(A, B, { slackScale: 1 })
+    expect(neutral).toEqual(omitted)
+    for (let frame = 0; frame < 90; frame += 1) {
+      const target = { x: .5 + Math.sin(frame * .1) * .2, y: .5 + Math.cos(frame * .1) * .2 }
+      omitted = stepActiveThread(retargetActiveThread(omitted, target), 16.67)
+      neutral = stepActiveThread(retargetActiveThread(neutral, target), 16.67)
+      expect(neutral).toEqual(omitted)
+    }
+  })
+
+  it('changes slack without moving endpoints or losing finite bounds', () => {
+    let light = setActiveThreadSlack(createActiveThread(A, B), 1.65)
+    let firm = setActiveThreadSlack(createActiveThread(A, B), .35)
+    for (let frame = 0; frame < 90; frame += 1) {
+      light = stepActiveThread(light, 16.67)
+      firm = stepActiveThread(firm, 16.67)
+    }
+    expect(light.points[0]).toEqual(A)
+    expect(firm.points.at(-1)).toEqual(B)
+    expect(activeThreadSag(light.points, A, B)).toBeGreaterThan(activeThreadSag(firm.points, A, B))
+    expect(firm.points.flatMap(point => [point.x, point.y]).every(Number.isFinite)).toBe(true)
+    expect(setActiveThreadSlack(firm, Number.NaN).slackScale).toBeUndefined()
+  })
   it('starts at the puncture, ends at the pointer, and includes mild deterministic slack', () => {
     const first = createActiveThread(A, B)
     const second = createActiveThread(A, B)

@@ -96,6 +96,7 @@ h2 { margin:0 0 12px; font-size:12px; text-transform:uppercase; letter-spacing:.
 .mode-copy { min-width:0; display:grid; gap:2px; }
 .mode-copy strong { font-size:12px; line-height:1.2; }
 .mode-copy small { overflow:hidden; color:var(--ink-soft); font-size:10px; line-height:1.25; text-overflow:ellipsis; white-space:nowrap; }
+#pressure-toggle .mode-copy small { overflow:visible; text-overflow:clip; white-space:normal; }
 .switch-track { width:32px; height:19px; padding:2px; border-radius:999px; background:var(--line); transition:background .2s ease; }
 .switch-track span { display:block; width:15px; height:15px; border-radius:50%; background:white; box-shadow:0 1px 3px rgba(69,50,38,.25); transition:transform .2s ease; }
 .mode-control[aria-pressed="true"] .switch-track { background:var(--accent); }

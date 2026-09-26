@@ -29,9 +29,10 @@ import { downloadRecovery } from './piece-storage'
 import { needlePassage, needlePose, type NeedlePose } from './needle-pose'
 import { heldNeedlePose } from './held-needle'
 import {
-  activeThreadSag, activeThreadDeflection, createActiveThread, retargetActiveThread, resetActiveThreadClock, snapshotActiveThread, stepActiveThread,
+  activeThreadSag, activeThreadDeflection, createActiveThread, retargetActiveThread, resetActiveThreadClock, setActiveThreadSlack, snapshotActiveThread, stepActiveThread,
   type ActiveThreadState,
 } from './active-thread'
+import { PressureGesture, pressureSlackScale } from './pressure-input'
 
 const colors = [['Poppy', '#b9403c'], ['Coral', '#df735f'], ['Marigold', '#d49a2f'], ['Leaf', '#55765b'], ['Indigo', '#425f86'], ['Plum', '#74516f'], ['Walnut', '#765443'], ['Ink', '#363539'], ['Cream', '#e6d7b7']] as const
 const builtInColorNames = new Map<string, string>(colors.map(([name, value]) => [value, name]))
@@ -67,6 +68,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <section class="tool-group"><h2>View & motion</h2><div class="mode-controls">
           <button class="mode-control" id="rotate-view" type="button" aria-pressed="false" aria-controls="hoop-rotator"><span class="mode-icon" aria-hidden="true">↻</span><span class="mode-copy"><strong id="rotation-title">Auto rotate</strong><small id="rotation-copy">Slowly turn from the current angle</small></span><span class="switch-track" aria-hidden="true"><span></span></span></button>
           <button class="mode-control" id="motion-toggle" type="button" aria-pressed="${settings.motionEnabled && !reducedMotionQuery.matches}"><span class="mode-icon needle-icon" aria-hidden="true">⌁</span><span class="mode-copy"><strong>Stitch motion</strong><small>Press, puncture, tighten, and settle</small></span><span class="switch-track" aria-hidden="true"><span></span></span></button>
+          <button class="mode-control" id="pressure-toggle" type="button" aria-pressed="${settings.pressureExperimentEnabled}"><span class="mode-icon needle-icon" aria-hidden="true">✎</span><span class="mode-copy"><strong>Pressure experiment</strong><small>Pen pressure changes loose thread only · device feel untested</small></span><span class="switch-track" aria-hidden="true"><span></span></span></button>
         </div><div class="view-actions"><button class="soft-button" id="view-front" type="button">Return front</button><button class="soft-button" id="view-back" type="button">Snap back</button></div></section>
         <details class="tool-group lighting-options"><summary>Appearance</summary><label for="studio-lighting">Lighting</label><select id="studio-lighting" aria-describedby="lighting-help">${STUDIO_LIGHTING_OPTIONS.map(option => `<option value="${option.id}"${option.id === studioLightingId(settings.lightingId) ? ' selected' : ''}>${option.label}</option>`).join('')}</select><p id="lighting-help">Screen lighting only; PNG images always use soft daylight.</p></details>
         <section class="tool-group history-group"><h2>Edit</h2><div class="edit-row"><button class="soft-button" id="undo" type="button" disabled aria-label="Undo last puncture">↶ <span>Undo</span></button><button class="soft-button" id="redo" type="button" disabled aria-label="Redo last puncture">↷ <span>Redo</span></button></div><button class="clear-button" id="clear" type="button" disabled>Clear fabric</button></section>
@@ -124,6 +126,7 @@ let tails: { side: SurfaceSide; visual: StitchMotion; startedAt: number; from: n
 let viewFrame: number | null = null
 let stitchPointerId: number | null = null
 let viewPointerId: number | null = null
+const pressureGesture = new PressureGesture()
 const touchRotation = new TouchRotation()
 const TOUCH_CAMERA_ID = -1
 let shiftRotation = false
@@ -141,6 +144,8 @@ const rotateButton = document.querySelector<HTMLButtonElement>('#rotate-view')!
 const frontButton = document.querySelector<HTMLButtonElement>('#view-front')!
 const backButton = document.querySelector<HTMLButtonElement>('#view-back')!
 const motionButton = document.querySelector<HTMLButtonElement>('#motion-toggle')!
+const pressureButton = document.querySelector<HTMLButtonElement>('#pressure-toggle')!
+pressureButton.classList.toggle('active', settings.pressureExperimentEnabled)
 const lightingSelect = document.querySelector<HTMLSelectElement>('#studio-lighting')!
 const undoButton = document.querySelector<HTMLButtonElement>('#undo')!
 const redoButton = document.querySelector<HTMLButtonElement>('#redo')!
@@ -300,6 +305,7 @@ function render(): void {
   hoopShell.dataset.targetMode = mode ?? 'blocked'
   hoopShell.dataset.activeThreadPoints = String(pointCount)
   hoopShell.dataset.activeThreadSag = sag.toFixed(5)
+  hoopShell.dataset.pressureSlackScale = String(activeThread?.slackScale ?? 1)
   hoopShell.dataset.activeThreadDeflection = String(activeThread ? activeThreadDeflection(activeThread.points, activeThread.anchor, activeThread.target) : 0)
   hoopShell.dataset.activeThreadLoopStarts = String(activeThreadLoopStarts)
   hoopShell.dataset.threadEyeX = String(activeThread?.points.at(-1)?.x ?? '')
@@ -414,7 +420,7 @@ function resetTransientToNeedle(redraw = true): void {
   activeThread = null
   if (redraw) render()
 }
-function updateTarget(point: NormalizedPoint): void {
+function updateTarget(point: NormalizedPoint, slackScale = 1): void {
   target = { ...point }
   hoverPose = heldNeedlePose(point, viewController.snapshot(), projectionGeometry())
   const eye = hoverPose.eye
@@ -423,10 +429,16 @@ function updateTarget(point: NormalizedPoint): void {
     activeThread = null
     stopActiveThreadLoop()
   } else if (activeThread && activeThread.anchor.x === anchor.x && activeThread.anchor.y === anchor.y) {
-    activeThread = retargetActiveThread(activeThread, eye)
+    activeThread = setActiveThreadSlack(retargetActiveThread(activeThread, eye), slackScale)
   } else {
-    activeThread = createActiveThread(anchor, eye, { reducedMotion: reducedMotionQuery.matches })
+    activeThread = createActiveThread(anchor, eye, { reducedMotion: reducedMotionQuery.matches, slackScale })
   }
+  ensureActiveThreadLoop()
+  render()
+}
+function neutralizePressurePreview(): void {
+  if (!activeThread) return
+  activeThread = setActiveThreadSlack(activeThread, 1)
   ensureActiveThreadLoop()
   render()
 }
@@ -536,6 +548,7 @@ function appendCustomSwatch(value: string): void {
 function releaseHoopPointer(pointerId: number): void { if (hoopShell.hasPointerCapture(pointerId)) hoopShell.releasePointerCapture(pointerId) }
 let cutGesture: { id: number; x: number; y: number; moved: boolean } | null = null
 function cancelNeedleInteraction(redraw = true, keepTouchGesture = false): void {
+  pressureGesture.cancel()
   const cutting = cutGesture
   cutGesture = null
   if (cutting) releaseHoopPointer(cutting.id)
@@ -592,7 +605,12 @@ hoopShell.addEventListener('pointerdown', (event) => {
     hoopShell.setPointerCapture(event.pointerId); syncViewControl(); render(); return
   }
   viewController.tick(performance.now()); const point = pointerPoint(event)
-  if (point) { interruptStitchMotion(); stitchPointerId = event.pointerId; hoopShell.setPointerCapture(event.pointerId); updateTarget(point); return }
+  if (point) {
+    interruptStitchMotion(); stitchPointerId = event.pointerId; hoopShell.setPointerCapture(event.pointerId)
+    if (settings.pressureExperimentEnabled && event.pointerType === 'pen') pressureGesture.begin(event.pointerId, event)
+    updateTarget(point, settings.pressureExperimentEnabled && event.pointerType === 'pen' ? pressureSlackScale(pressureGesture.strength) : 1)
+    return
+  }
   stopViewLoop()
   if (!viewController.beginGesture(event.pointerId, event.clientX, event.clientY)) return
   viewPointerId = event.pointerId
@@ -626,8 +644,13 @@ hoopShell.addEventListener('pointermove', (event) => {
     return
   }
   if (stitchPointerId !== null && stitchPointerId !== event.pointerId) return
+  if (settings.pressureExperimentEnabled && stitchPointerId === event.pointerId && event.pointerType === 'pen') {
+    for (const sample of event.getCoalescedEvents?.() ?? []) pressureGesture.move(sample.pointerId, sample)
+    pressureGesture.move(event.pointerId, event)
+  }
   const next = pointerPoint(event)
-  if (next) { floating = false; if (motion) interruptStitchMotion(); updateTarget(next) }
+  if (next) { floating = false; if (motion) interruptStitchMotion(); updateTarget(next,
+    settings.pressureExperimentEnabled && stitchPointerId === event.pointerId && event.pointerType === 'pen' ? pressureSlackScale(pressureGesture.strength) : 1) }
 })
 window.addEventListener('pointermove', event => {
   if (cutGesture || event.pointerType !== 'mouse' || !event.isPrimary || event.shiftKey || !needleAvailable()
@@ -660,19 +683,22 @@ hoopShell.addEventListener('pointerup', (event) => {
   }
   if (viewController.endGesture(event.pointerId)) { viewPointerId = null; releaseHoopPointer(event.pointerId); syncViewControl(); announceViewPosition('View adjusted'); render(); return }
   if (stitchPointerId !== event.pointerId) return
+  const finalPressureScale = settings.pressureExperimentEnabled && event.pointerType === 'pen' ? pressureSlackScale(pressureGesture.strength) : 1
+  pressureGesture.end(event.pointerId)
+  pressureGesture.cancel()
   stitchPointerId = null; releaseHoopPointer(event.pointerId); let point = pointerPoint(event)
   if (!point) { resetTransientToNeedle(); return }
   const guideTarget = guide ? guideTargets(guide)[guideIndex] : undefined
   if(tulipAction&&tulipAction.kind!=='done'){
     if(!('target' in tulipAction)||visibleSurface(viewController.snapshot())!==tulipAction.side
-      || !nearGuideTarget(point,tulipAction.target)){updateTulipCopy();return}
+      || !nearGuideTarget(point,tulipAction.target)){neutralizePressurePreview();updateTulipCopy();return}
     point={...tulipAction.target}
   }
-  if (guideTarget && !nearGuideTarget(point, guideTarget)) { announce('Next flower point', 'Follow the highlighted guide point before continuing.'); return }
+  if (guideTarget && !nearGuideTarget(point, guideTarget)) { neutralizePressurePreview();announce('Next flower point', 'Follow the highlighted guide point before continuing.'); return }
   const previousPosition = activeAnchor()
-  if (previousPosition && Math.hypot(point.x - previousPosition.x, point.y - previousPosition.y) < .018) { announce('A little farther', 'Move the needle tip before puncturing again.'); return }
+  if (previousPosition && Math.hypot(point.x - previousPosition.x, point.y - previousPosition.y) < .018) { neutralizePressurePreview();announce('A little farther', 'Move the needle tip before puncturing again.'); return }
   if (!canPuncture(history.present) || history.present.nextOrder>=999_999_999) { resetTransientToNeedle(false); announce('Fabric full', 'This piece has reached its local segment limit. Undo or clear before adding more.'); render(); return }
-  updateTarget(point)
+  updateTarget(point, finalPressureScale)
   const loosePoints = snapshotActiveThread(activeThread)
   stopActiveThreadLoop()
   let nextState:ThreadRunState, validatedRaw:string
@@ -732,6 +758,19 @@ backButton.addEventListener('click', () => { if (cutGesture || stitchPointerId !
 motionButton.addEventListener('click', () => {
   settings = { ...settings, motionEnabled: !settings.motionEnabled }; saveSettings(settings); stopStitchMotion(false); resetTransientToNeedle(false); syncMotionControl(); render()
   announce(settings.motionEnabled ? 'Stitch motion on' : 'Stitch motion off', settings.motionEnabled ? 'Punctures tighten from the loose thread you are moving.' : 'Live thread following remains; punctures settle immediately.')
+})
+pressureButton.addEventListener('click', () => {
+  settings = { ...settings, pressureExperimentEnabled: !settings.pressureExperimentEnabled }
+  saveSettings(settings)
+  pressureButton.setAttribute('aria-pressed', String(settings.pressureExperimentEnabled))
+  pressureButton.classList.toggle('active', settings.pressureExperimentEnabled)
+  if (!settings.pressureExperimentEnabled) {
+    pressureGesture.cancel()
+    if (activeThread) { activeThread = setActiveThreadSlack(activeThread, 1); ensureActiveThreadLoop() }
+  }
+  render()
+  announce(settings.pressureExperimentEnabled ? 'Pressure experiment on' : 'Pressure experiment off',
+    settings.pressureExperimentEnabled ? 'Only active pen pressure changes the loose thread preview; device feel is untested.' : 'Loose thread preview uses its normal response.')
 })
 function restoreActiveColor():void{
   const run=activeThreadRun(runHistory.present),value=run?.color??(run?history.present.punctures.at(-1)?.color:tulipGuide?libraryPattern(tulipGuide.patternId)?.runs[0]?.color:null)

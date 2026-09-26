@@ -22,6 +22,17 @@ describe('studio settings', () => {
   it('defaults stitch motion around the reduced-motion preference', () => {
     expect(defaultSettings(false).motionEnabled).toBe(true)
     expect(defaultSettings(true).motionEnabled).toBe(false)
+    expect(defaultSettings(false).pressureExperimentEnabled).toBe(false)
+    expect(defaultSettings(true).pressureExperimentEnabled).toBe(false)
+  })
+
+  it('requires an explicit boolean opt-in for pressure across current and legacy settings', () => {
+    for (const value of [undefined, null, 0, 1, 'true', {}, []]) {
+      expect(deserializeSettings(JSON.stringify({ schemaVersion: 2, pressureExperimentEnabled: value })).pressureExperimentEnabled).toBe(false)
+    }
+    expect(deserializeSettings(JSON.stringify({ schemaVersion: 2, pressureExperimentEnabled: true })).pressureExperimentEnabled).toBe(true)
+    expect(deserializeSettings(JSON.stringify({ motionEnabled: true })).pressureExperimentEnabled).toBe(false)
+    expect(deserializeSettings(serializeSettings({ ...defaultSettings(), pressureExperimentEnabled: true })).pressureExperimentEnabled).toBe(true)
   })
 
   it('normalizes, deduplicates, and rejects unsafe colors', () => {

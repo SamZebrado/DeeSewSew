@@ -239,7 +239,7 @@ test('1,000 settled segments plus one active soft thread remain interactively bo
   expect(reloadMs).toBeLessThan(5_000)
 })
 
-test('advanced experiments have no public DOM, storage, query, shortcut, or remote-network entry point', async ({ page }) => {
+test('only default-off Pressure experiment is public; other advanced experiments remain inaccessible', async ({ page }) => {
   await page.evaluate(() => {
     localStorage.setItem('force', 'firm')
     localStorage.setItem('gyro', 'true')
@@ -248,6 +248,11 @@ test('advanced experiments have no public DOM, storage, query, shortcut, or remo
   await page.goto('./?force=firm&pressure=1&gyro=1&topology=1&freeMode=1')
   const audit = await page.evaluate(() => ({
     visibleText: document.body.innerText,
+    pressureToggleCount: document.querySelectorAll('#pressure-toggle').length,
+    pressurePressed: document.querySelector('#pressure-toggle')?.getAttribute('aria-pressed'),
+    pressureText: document.querySelector('#pressure-toggle')?.textContent || '',
+    pressureVisibleText: (document.querySelector('#pressure-toggle') as HTMLElement | null)?.innerText || '',
+    storedPressureEnabled: JSON.parse(localStorage.getItem('deesewsew-settings-v2') || 'null')?.pressureExperimentEnabled === true,
     controls: [...document.querySelectorAll('button,input,select,[role="button"],[role="slider"]')].map((element) => ({
       id: element.id,
       name: element.getAttribute('name'),
@@ -257,9 +262,16 @@ test('advanced experiments have no public DOM, storage, query, shortcut, or remo
     })),
     resources: performance.getEntriesByType('resource').map((entry) => entry.name),
   }))
-  const serializedControls = JSON.stringify(audit.controls)
+  expect(audit.pressureToggleCount).toBe(1)
+  expect(audit.pressurePressed).toBe('false')
+  expect(audit.storedPressureEnabled).toBe(false)
+  expect(audit.pressureText).toContain('Pressure experiment')
+  expect(audit.pressureText).toContain('Pen pressure changes loose thread only')
+  expect(audit.pressureText).toContain('device feel untested')
+  const otherVisibleText = audit.visibleText.replace(audit.pressureVisibleText, '')
+  const serializedControls = JSON.stringify(audit.controls.filter(control => control.id !== 'pressure-toggle'))
   for (const forbidden of ['pressure', 'tilt', 'needle size', 'thread diameter', 'penetration', 'topology', 'gyroscope', 'free mode', 'split layer', 'touch deformation']) {
-    expect(audit.visibleText.toLowerCase()).not.toContain(forbidden)
+    expect(otherVisibleText.toLowerCase()).not.toContain(forbidden)
     expect(serializedControls.toLowerCase()).not.toContain(forbidden)
   }
   expect(audit.resources.every((resource) => new URL(resource).origin === new URL(page.url()).origin)).toBe(true)
