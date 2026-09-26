@@ -29,4 +29,12 @@ describe('touch rotation ownership', () => {
     expect(gesture.down(4, 10, 10, true)).toBe('stitch')
     expect(gesture.down(5, 20, 10)).toBe('rotate')
   })
+  it('suppresses a pending first contact when an outside contact interrupts it', () => {
+    const gesture = new TouchRotation()
+    expect(gesture.down(1, 10, 10, true)).toBe('stitch')
+    gesture.cancel()
+    expect(gesture.blocked).toBe(true)
+    expect(gesture.up(1)).toBe(true)
+    expect(gesture.down(3, 20, 20, true)).toBe('stitch')
+  })
 })

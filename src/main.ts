@@ -598,6 +598,13 @@ hoopShell.addEventListener('pointerdown', (event) => {
   viewPointerId = event.pointerId
   hoopShell.setPointerCapture(event.pointerId); syncViewControl(); render()
 })
+window.addEventListener('pointerdown', (event) => {
+  // A second finger outside the hoop is still part of the same touch sequence.
+  // Its release must not leave the held needle eligible to puncture.
+  if (event.pointerType === 'touch' && !event.isPrimary && stitchPointerId !== null
+    && touchRotation.has(stitchPointerId) && !touchRotation.blocked
+    && !hoopShell.contains(event.target as Node)) cancelNeedleInteraction()
+})
 hoopShell.addEventListener('pointermove', (event) => {
   if (cutGesture) {
     if (cutGesture.id === event.pointerId && Math.hypot(event.clientX-cutGesture.x,event.clientY-cutGesture.y)>6) cutGesture.moved=true
