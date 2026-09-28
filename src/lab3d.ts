@@ -1,21 +1,25 @@
-import { add, anchor, createImportOwnership, displayPoint, emptyLab, parseLab, pick, project, scale, serializeLab, span, toggleSupport, worldAnchor, type Camera, type LabArtwork, type Vec3 } from './lab3d-model'
+import { add, anchor, createImportOwnership, displayPoint, emptyLab, finishRun, startRun, MAX_LAB_FILE_BYTES, parseLab, pick, project, scale, serializeLab, span, toggleSupport, worldAnchor, type Camera, type LabArtwork, type Vec3 } from './lab3d-model'
+import { threeBands } from './lab3d-example'
 import { labKey } from './lab3d-input'
 import { localize, locale, setText, switchLocale, t } from './i18n'
 import './lab3d.css'
 
 document.querySelector('#lab')!.innerHTML = `<header><div class="lab-links"><a href="${import.meta.env.BASE_URL}">Back to embroidery</a><button id="language" type="button"></button></div><h1>3D Lab — Experimental</h1><p>Desktop-first sphere study. Surface-laid thread, not through-fabric stitching.</p></header>
 <nav aria-label="Lab controls"><div role="group" aria-label="View and support"><button id="tool" aria-pressed="false">Thread tool</button><button id="support">Remove support</button></div><div role="group" aria-label="History"><button id="undo">Undo</button><button id="redo">Redo</button></div><div role="group" aria-label="Lab files"><button id="save">Save lab</button><button id="load">Load lab</button><button id="download">Export lab JSON</button><label><span>Import lab</span><input id="import" type="file" accept=".json" aria-label="Import lab"></label></div></nav>
+<div class="run-controls" role="group" aria-label="Thread runs"><label for="thread-color">Next thread color</label><input id="thread-color" type="color" value="#9b4a48"><button id="new-run">New thread</button><button id="finish-run">Finish / cut</button><button id="example">Try three curved bands</button></div>
+<p id="run-help">Place a few anchors, finish / cut, choose a color, then start a new thread. Each run stays separate. The example is available only on an empty work; Undo returns to it.</p><ol id="runs" aria-label="Thread runs"></ol>
 <p id="summary"></p><p id="status" role="status" aria-live="polite"></p><p id="input-help">Drag to orbit; wheel to zoom. In Thread mode, click the sphere to place an anchor. Focus the canvas: arrows orbit, +/- zoom, Home resets view, Enter places the center target, Escape cancels.</p>
 <canvas aria-label="Experimental sphere and spatial thread" aria-describedby="input-help lab-limits manual-save" tabindex="0"></canvas>
 <p id="manual-save">Manual save: one separate experimental slot on this device. Save before leaving; export JSON for a portable backup. Ordinary artwork is unchanged.</p>
-<p id="lab-limits">Artistic rest-shape display, not real silk equilibrium. One sphere, one surface-contact run, at most 32 anchors. Visual desktop experiment; not full nonvisual or mobile 3D authoring.</p>`
+<p id="lab-limits">Artistic rest-shape display, not real silk equilibrium. One sphere, up to 8 independent surface-contact runs, 32 anchors each. Desktop-first experiment; not full nonvisual or mobile 3D authoring.</p>`
 localize(document.querySelector('#lab')!)
 const canvas=document.querySelector('canvas')!, ctx=canvas.getContext('2d')!
 const status=document.querySelector<HTMLElement>('#status')!
 const summary=document.querySelector<HTMLElement>('#summary')!
 let artwork=emptyLab(), camera:Camera={yaw:0,pitch:.15,distance:3.5}, editing=false
 let past:LabArtwork[]=[], future:LabArtwork[]=[]
-const importOwnership=createImportOwnership(), key='deesewsew.experimental.sphere.v1'
+const importOwnership=createImportOwnership(), key='deesewsew.experimental.sphere.v2', legacyKey='deesewsew.experimental.sphere.v1'
+const color=document.querySelector<HTMLInputElement>('#thread-color')!
 let width=800,height=550,releaseAt:number|null=null,frame:number|null=null
 let gesture:{id:number;x:number;y:number;lastX:number;lastY:number;drag:boolean}|null=null
 function feedback(message:string){setText(status,message)}
@@ -27,7 +31,12 @@ function refresh(){
   document.querySelector<HTMLButtonElement>('#support')!.disabled=artwork.support.role==='permanent'
   document.querySelector<HTMLButtonElement>('#undo')!.disabled=!past.length
   document.querySelector<HTMLButtonElement>('#redo')!.disabled=!future.length
-  summary.textContent=`${t(editing?'Thread mode':'Camera mode')} · ${artwork.run?.anchors.length??0}/32 ${t('anchors')} · ${t(artwork.support.state==='installed'?'Support installed':'Support removed')}`
+  const active=artwork.runs.find(r=>r.id===artwork.activeRunId)
+  document.querySelector<HTMLButtonElement>('#new-run')!.disabled=!!active||artwork.runs.length>=8||artwork.support.state!=='installed'
+  document.querySelector<HTMLButtonElement>('#finish-run')!.disabled=!active?.anchors.length
+  document.querySelector<HTMLButtonElement>('#example')!.disabled=artwork.runs.length>0||artwork.support.state!=='installed'
+  summary.textContent=`${t(editing?'Thread mode':'Camera mode')} · ${artwork.runs.length}/8 ${t('runs')} · ${active?.anchors.length??0}/32 ${t('active anchors')} · ${t(artwork.support.state==='installed'?'Support installed':'Support removed')}`
+  const list=document.querySelector('#runs')!;list.replaceChildren(...artwork.runs.map((run,i)=>{const item=document.createElement('li'),swatch=document.createElement('span');swatch.className='run-swatch';swatch.style.backgroundColor=run.color;swatch.setAttribute('aria-hidden','true');item.append(swatch,`${i+1} · ${run.color} · ${run.anchors.length} ${t('anchors')} · ${t(run.state==='open'?'Open':'Finished')}`);return item}))
 }
 function stopDisplay(){if(frame!==null)cancelAnimationFrame(frame);frame=null;releaseAt=null}
 function animate(now:number){frame=null;if(releaseAt===null)return;if(now-releaseAt>=1200){releaseAt=null;draw();return}draw();frame=requestAnimationFrame(animate)}
@@ -39,15 +48,15 @@ function draw(){
     const r=f/Math.sqrt(camera.distance**2-1),g=ctx.createRadialGradient(width/2-r*.3,height/2-r*.35,r*.1,width/2,height/2,r)
     g.addColorStop(0,'#faf5e7');g.addColorStop(1,'#b9b7a5');ctx.fillStyle=g;ctx.beginPath();ctx.arc(width/2,height/2,r,0,Math.PI*2);ctx.fill()
   }
-  const lines:{a:Vec3;b:Vec3}[]=[],points=artwork.run?.anchors??[],age=releaseAt===null?1200:performance.now()-releaseAt
-  for(let i=1;i<points.length;i++){const path=span(points[i-1]!,points[i]!).map((p,j)=>displayPoint(p,j/24,age));for(let j=1;j<path.length;j++)lines.push({a:screen(path[j-1]!),b:screen(path[j]!)})}
+  const lines:{a:Vec3;b:Vec3;color:string}[]=[],age=releaseAt===null?1200:performance.now()-releaseAt
+  for(const run of artwork.runs){const points=run.anchors;for(let i=1;i<points.length;i++){const path=span(points[i-1]!,points[i]!).map((p,j)=>displayPoint(p,j/24,age));for(let j=1;j<path.length;j++)lines.push({a:screen(path[j-1]!),b:screen(path[j]!),color:run.color})}}
   lines.sort((a,b)=>(b.a[2]+b.b[2])-(a.a[2]+a.b[2]))
   for(const line of lines){
     if(artwork.support.state==='installed'&&(line.a[2]+line.b[2])/2>camera.distance-1/camera.distance)continue
-    ctx.strokeStyle='#9b4a48';ctx.lineWidth=3.2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(line.a[0],line.a[1]);ctx.lineTo(line.b[0],line.b[1]);ctx.stroke()
+    ctx.strokeStyle=line.color;ctx.lineWidth=3.2;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(line.a[0],line.a[1]);ctx.lineTo(line.b[0],line.b[1]);ctx.stroke()
   }
-  for(const p of points){const v=screen(p);if(artwork.support.state==='installed'&&v[2]>camera.distance-1/camera.distance)continue;ctx.fillStyle='#663633';ctx.beginPath();ctx.arc(v[0],v[1],4,0,Math.PI*2);ctx.fill()}
-  const reticle=document.activeElement===canvas&&editing&&artwork.support.state==='installed'
+  for(const run of artwork.runs)for(const p of run.anchors){const v=screen(p);if(artwork.support.state==='installed'&&v[2]>camera.distance-1/camera.distance)continue;ctx.fillStyle=run.color;ctx.beginPath();ctx.arc(v[0],v[1],3,0,Math.PI*2);ctx.fill()}
+  const reticle=document.activeElement===canvas&&editing&&artwork.support.state==='installed'&&(!!artwork.activeRunId||!artwork.runs.length)
   if(reticle){ctx.strokeStyle='#303330';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(width/2,height/2,8,0,Math.PI*2);ctx.moveTo(width/2-12,height/2);ctx.lineTo(width/2+12,height/2);ctx.moveTo(width/2,height/2-12);ctx.lineTo(width/2,height/2+12);ctx.stroke()}
   canvas.dataset.reticle=String(reticle);canvas.dataset.canonical=serializeLab(artwork);canvas.dataset.camera=JSON.stringify(camera)
 }
@@ -55,25 +64,29 @@ function commit(next:LabArtwork){if(next===artwork)return;gesture=null;importOwn
 function problem(error:unknown,operation:'edit'|'save'|'load'|'import'|'export'){
   const message=error instanceof Error?error.message:''
   if(message.includes('32 anchors'))return feedback('This lab supports at most 32 anchors.')
+  if(message.includes('Start a new run'))return feedback('Start a new thread before placing another anchor.')
   if(message.includes('non-antipodal'))return feedback('Choose a distinct point, not the opposite pole.')
   if(message.includes('installed sphere'))return feedback('Reinstall the support before placing an anchor.')
   if(operation==='save')return feedback(error instanceof DOMException&&error.name==='QuotaExceededError'?'Local storage is full. Export a JSON backup.':'Local save is unavailable. Export a JSON backup.')
-  if(operation==='import')return feedback(message.includes('too large')?'Lab files must be at most 16 KB.':'Choose a valid experimental Lab JSON file. Your current work is unchanged.')
+  if(operation==='import')return feedback(message.includes('too large')?'Lab files must be at most 128 KB.':'Choose a valid experimental Lab JSON file. Your current work is unchanged.')
   if(operation==='load')return feedback('Could not load the experimental slot. Your current work is unchanged.')
   feedback(operation==='export'?'Could not export the lab. Your current work is unchanged.':'Could not place an anchor. Your current work is unchanged.')
 }
-function place(x:number,y:number){try{const p=pick(x,y,{...camera,target:artwork.support.transform});if(!p){feedback('Choose a point on the sphere.');return}commit(anchor(artwork,add(p,scale(artwork.support.transform,-1))));feedback('Anchor placed.')}catch(e){problem(e,'edit')}}
+function place(x:number,y:number){try{const p=pick(x,y,{...camera,target:artwork.support.transform});if(!p){feedback('Choose a point on the sphere.');return}const current=artwork.runs.length?artwork:startRun(artwork,color.value);commit(anchor(current,add(p,scale(artwork.support.transform,-1))));feedback('Anchor placed.')}catch(e){problem(e,'edit')}}
+document.querySelector('#new-run')!.addEventListener('click',()=>{try{commit(startRun(artwork,color.value));editing=true;refresh();draw();feedback('New independent thread started.')}catch(e){problem(e,'edit')}})
+document.querySelector('#finish-run')!.addEventListener('click',()=>{try{commit(finishRun(artwork));feedback('Thread finished. Choose a color and start a new thread.')}catch(e){problem(e,'edit')}})
+document.querySelector('#example')!.addEventListener('click',()=>{if(artwork.runs.length||artwork.support.state!=='installed')return;commit(threeBands(artwork));feedback('Three independent curved bands. Orbit, remove support, or save your work.');})
 document.querySelector('#language')!.addEventListener('click',()=>{switchLocale();refresh()})
 document.querySelector('#tool')!.addEventListener('click',()=>{gesture=null;editing=!editing;refresh();draw();feedback(editing?'Thread mode: choose the center target or click the sphere.':'Camera mode: view changes never add anchors.')})
-document.querySelector('#support')!.addEventListener('click',()=>{commit(toggleSupport(artwork));feedback(artwork.support.state==='removed'?'Support removed; rest shape preserved.':'Support reinstalled.');if(artwork.support.state==='removed'&&artwork.run&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.hidden){releaseAt=performance.now();frame=requestAnimationFrame(animate)}})
+document.querySelector('#support')!.addEventListener('click',()=>{commit(toggleSupport(artwork));feedback(artwork.support.state==='removed'?'Support removed; rest shape preserved.':'Support reinstalled.');if(artwork.support.state==='removed'&&artwork.runs.length&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.hidden){releaseAt=performance.now();frame=requestAnimationFrame(animate)}})
 document.querySelector('#undo')!.addEventListener('click',()=>{if(!past.length)return;gesture=null;importOwnership.invalidate();stopDisplay();future.push(artwork);artwork=past.pop()!;refresh();draw();feedback('Operation undone')})
 document.querySelector('#redo')!.addEventListener('click',()=>{if(!future.length)return;gesture=null;importOwnership.invalidate();stopDisplay();past.push(artwork);artwork=future.pop()!;refresh();draw();feedback('Operation restored')})
 document.querySelector('#save')!.addEventListener('click',()=>{try{localStorage.setItem(key,serializeLab(artwork));feedback('Experimental lab saved locally.')}catch(e){problem(e,'save')}})
-document.querySelector('#load')!.addEventListener('click',()=>{try{const raw=localStorage.getItem(key);if(raw===null){feedback('No experimental lab save yet.');return}commit(parseLab(raw));feedback('Experimental lab loaded.')}catch(e){problem(e,'load')}})
+document.querySelector('#load')!.addEventListener('click',()=>{try{const raw=localStorage.getItem(key)??localStorage.getItem(legacyKey);if(raw===null){feedback('No experimental lab save yet.');return}commit(parseLab(raw));feedback('Experimental lab loaded.')}catch(e){problem(e,'load')}})
 document.querySelector('#download')!.addEventListener('click',()=>{try{const url=URL.createObjectURL(new Blob([serializeLab(artwork)],{type:'application/json'}));try{const a=document.createElement('a');a.href=url;a.download='sphere.deesewsew-lab3d.json';a.click();feedback('Lab JSON download started.')}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}}catch(e){problem(e,'export')}})
 document.querySelector<HTMLInputElement>('#import')!.addEventListener('change',async e=>{
   const input=e.target as HTMLInputElement,file=input.files?.[0];if(!file)return;const token=importOwnership.start()
-  try{if(file.size>16000)throw Error('Lab file too large');const raw=await file.text();if(!importOwnership.owns(token))return;input.value='';commit(parseLab(raw));feedback('Experimental lab imported.')}catch(e){if(importOwnership.owns(token)){input.value='';problem(e,'import')}}
+  try{if(file.size>MAX_LAB_FILE_BYTES)throw Error('Lab file too large');const raw=await file.text();if(!importOwnership.owns(token))return;input.value='';commit(parseLab(raw));feedback('Experimental lab imported.')}catch(e){if(importOwnership.owns(token)){input.value='';problem(e,'import')}}
 })
 canvas.addEventListener('pointerdown',e=>{if(gesture||e.button!==0)return;gesture={id:e.pointerId,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,drag:false};canvas.setPointerCapture(e.pointerId)})
 canvas.addEventListener('pointermove',e=>{if(!gesture||gesture.id!==e.pointerId)return;gesture.drag ||= Math.hypot(e.clientX-gesture.x,e.clientY-gesture.y)>5;if(gesture.drag){camera={...camera,yaw:camera.yaw+(e.clientX-gesture.lastX)*.008,pitch:Math.max(-1.4,Math.min(1.4,camera.pitch+(e.clientY-gesture.lastY)*.008))};draw()}gesture.lastX=e.clientX;gesture.lastY=e.clientY})

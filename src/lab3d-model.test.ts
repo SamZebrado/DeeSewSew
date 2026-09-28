@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest'
-import { anchor,createImportOwnership,displayPoint,emptyLab,parseLab,pick,project,serializeLab,span,toggleSupport,worldAnchor } from './lab3d-model'
+import { anchor,createImportOwnership,displayPoint,emptyLab,finishRun,parseLab,pick,project,serializeLab,span,startRun,toggleSupport,worldAnchor } from './lab3d-model'
 import { parseThreadArtwork } from './thread-run-storage'
 describe('bounded independent sphere lab',()=>{
   it('invalidates delayed imports after newer imports and canonical edits',async()=>{
@@ -36,7 +36,7 @@ describe('bounded independent sphere lab',()=>{
     expect(project(picked,camera)[1]).toBeCloseTo(.07,10)
     expect(toggleSupport(toggleSupport(a))).toEqual(a)
     expect(serializeLab(parseLab(serializeLab(a)))).toBe(serializeLab(a))
-    expect(toggleSupport(a).run).toBe(a.run)
+    expect(toggleSupport(a).runs).toBe(a.runs)
   })
   it('preserves spatial depth and perspective ray intersection across orbit',()=>{
     for(const yaw of [0,.7,2,4]){const c={yaw,pitch:.2,distance:3};const p=pick(.08,-.05,c)!;const projected=project(p,c);expect(projected[0]).toBeCloseTo(.08,10);expect(projected[1]).toBeCloseTo(-.05,10);expect(Math.hypot(...p)).toBeCloseTo(1,10)}
@@ -53,10 +53,80 @@ describe('bounded independent sphere lab',()=>{
     expect(()=>parseLab('{"schemaVersion":4}')).toThrow()
     expect(()=>parseThreadArtwork(serializeLab(emptyLab()))).toThrow()
     for(const transform of [[null,0,0],[11,0,0],[0,0]])expect(()=>parseLab(JSON.stringify({...emptyLab(),support:{...emptyLab().support,transform}}))).toThrow()
-    expect(()=>parseLab(' '.repeat(16001))).toThrow()
+    expect(()=>parseLab(' '.repeat(128*1024+1))).toThrow()
   })
   it('bounds canonical anchor count',()=>{
     let a=emptyLab();for(let i=0;i<32;i++)a=anchor(a,[Math.sin(i*.1),0,Math.cos(i*.1)])
     expect(()=>anchor(a,[0,1,0])).toThrow('32 anchors')
+  })
+  it('migrates actual v1 null and single-anchor records with support state intact',()=>{
+    const old={format:'deesewsew-lab3d',version:1,support:{id:'sphere-1',shape:'sphere',radius:1,transform:[2,-3,4],role:'removable',state:'removed'},run:null,display:'artistic-rest-shape'}
+    const empty=parseLab(JSON.stringify(old));expect(empty.version).toBe(2);expect(empty.runs).toEqual([]);expect(empty.support.transform).toEqual([2,-3,4]);expect(empty.support.state).toBe('removed')
+    const one=parseLab(JSON.stringify({...old,run:{id:'run-1',color:'#9b4a48',anchors:[[0,0,1]],path:'great-circle-v1'}}))
+    expect(one.runs).toEqual([{id:'run-1',color:'#9b4a48',anchors:[[0,0,1]],path:'great-circle-v1',state:'open'}])
+    expect(one.activeRunId).toBe('run-1');expect(parseLab(serializeLab(one))).toEqual(one)
+    const permanent=parseLab(JSON.stringify({...old,support:{...old.support,role:'permanent',state:'installed'}}));expect(permanent.support.role).toBe('permanent')
+  })
+  it('tracks ordered runs and keeps completed runs immutable',()=>{
+    let a=anchor(emptyLab(),[0,0,1]);a=finishRun(a)
+    expect(a.activeRunId).toBeNull();expect(()=>anchor(a,[1,0,0])).toThrow('Start a new run')
+    expect(()=>startRun({...a,support:{...a.support,state:'removed'}},'#123456')).toThrow()
+    a=startRun(a,'#123456');expect(()=>startRun(a)).toThrow('Finish')
+    a=anchor(a,[1,0,0]);a=finishRun(a)
+    expect(a.runs.map(r=>r.id)).toEqual(['run-1','run-2'])
+    expect(a.runs.map(r=>r.color)).toEqual(['#9b4a48','#123456'])
+    expect(a.runs.map(r=>r.state)).toEqual(['completed','completed'])
+    expect(parseLab(serializeLab(a))).toEqual(a)
+    expect(a.runs[0]!.anchors).toEqual([[0,0,1]])
+  })
+  it('rejects bad IDs, colors, active ownership, and run bounds',()=>{
+    const first=anchor(emptyLab(),[0,0,1])
+    for(const bad of [
+      {...first,runs:[{...first.runs[0],id:'run-2'}]},
+      {...first,runs:[{...first.runs[0],color:'red'}]},
+      {...first,activeRunId:null},
+      {...first,runs:[{...first.runs[0],state:'completed'}]},
+      {...first,runs:[{...first.runs[0],anchors:[[0,0,-1]]}],activeRunId:'run-2'},
+    ])expect(()=>parseLab(JSON.stringify(bad))).toThrow()
+    expect(()=>startRun(emptyLab(),'#xyzxyz')).toThrow()
+    let a=finishRun(first)
+    for(let i=2;i<=8;i++)a=finishRun(anchor(startRun(a),[0,0,1]))
+    expect(a.runs).toHaveLength(8);expect(()=>startRun(a)).toThrow('8 runs')
+    expect(()=>parseLab(JSON.stringify({...a,runs:[...a.runs,a.runs[0]]}))).toThrow()
+  })
+  it('migrates the captured public v1 multi-anchor geometry without changing coordinates',()=>{
+    // Captured in ../DeeSewSew-pressure-release/review/public-playtest-20260928/evidence/lab-v1.json.
+    const anchors=[[-0.6060965005420977,0.07587908784249452,0.79176347229385],[-0.28908341742610383,0.4027387804967832,0.8684654584111039],[0.28908341742610383,0.4027387804967832,0.8684654584111039],[0.6060965005420977,0.07587908784249452,0.79176347229385],[0.2915778422601489,-0.1954998095964109,0.9363558011518287],[-0.2915778422601489,-0.1954998095964109,0.9363558011518287],[-0.6060965005420977,0.07587908784249452,0.79176347229385]]
+    const legacy={format:'deesewsew-lab3d',version:1,support:{id:'sphere-1',shape:'sphere',radius:1,transform:[2,-3,4],role:'removable',state:'removed'},run:{id:'run-1',color:'#9b4a48',anchors,path:'great-circle-v1'},display:'artistic-rest-shape'}
+    const migrated=parseLab(JSON.stringify(legacy))
+    expect(migrated.runs[0]!.anchors).toEqual(anchors)
+    expect(migrated.support.transform).toEqual([2,-3,4])
+    expect(migrated.support.state).toBe('removed')
+    expect(parseLab(serializeLab(migrated))).toEqual(migrated)
+  })
+  it('rejects missing or malformed legacy run and malformed v2 run slots',()=>{
+    const legacy={format:'deesewsew-lab3d',version:1,support:emptyLab().support,display:'artistic-rest-shape'}
+    expect(()=>parseLab(JSON.stringify(legacy))).toThrow()
+    expect(()=>parseLab(JSON.stringify({...legacy,run:undefined}))).toThrow()
+    for(const run of [null,undefined])expect(()=>parseLab(JSON.stringify({...emptyLab(),runs:[run]}))).toThrow()
+    const open=startRun(emptyLab())
+    expect(parseLab(serializeLab(open))).toEqual(open)
+    expect(()=>finishRun(open)).toThrow('anchor')
+    expect(()=>parseLab(JSON.stringify({...open,runs:[{...open.runs[0],state:'completed'}],activeRunId:null}))).toThrow()
+    const closed=finishRun(anchor(open,[0,0,1]))
+    expect(()=>parseLab(JSON.stringify({...closed,runs:[closed.runs[0],closed.runs[0]]}))).toThrow()
+    expect(()=>parseLab(JSON.stringify({...closed,runs:[{...closed.runs[0],state:'open'}, {...closed.runs[0],id:'run-2',state:'open'}],activeRunId:'run-2'}))).toThrow()
+    expect(()=>parseLab(JSON.stringify({...closed,runs:[{...closed.runs[0],state:'open'}, {...closed.runs[0],id:'run-2'}],activeRunId:'run-1'}))).toThrow()
+  })
+  it('roundtrips all 8 runs with 32 canonical anchors each',()=>{
+    let a=emptyLab()
+    for(let run=0;run<8;run++){
+      a=startRun(a,`#${(run+1).toString(16).padStart(6,'0')}`)
+      for(let i=0;i<32;i++)a=anchor(a,[Math.sin(i*.1),0,Math.cos(i*.1)])
+      a=finishRun(a)
+    }
+    expect(a.runs.map(r=>r.id)).toEqual(Array.from({length:8},(_,i)=>`run-${i+1}`))
+    expect(a.runs.every(r=>r.anchors.length===32&&r.state==='completed')).toBe(true)
+    expect(parseLab(serializeLab(a))).toEqual(a)
   })
 })
