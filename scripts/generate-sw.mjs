@@ -23,7 +23,8 @@ for (const asset of assets) {
 }
 const version = hash.digest('hex').slice(0, 12)
 const root = '/DeeSewSew/'
-const precache = assets.map((asset) => `${root}${asset === 'index.html' ? '' : asset}`)
+// Directory-entry pages are visited through their clean public route.
+const precache = assets.map((asset) => `${root}${asset === 'index.html' ? '' : asset.endsWith('/index.html') ? asset.slice(0, -10) : asset}`)
 
 const source = `const VERSION = 'deesewsew-${version}'
 const ROOT = '${root}'

@@ -3,6 +3,9 @@
 浏览器里的小小数字刺绣工作室。
 A tiny embroidery studio in your browser.
 
+- [在线刺绣 / Play](https://samzebrado.github.io/DeeSewSew/)
+- [玩法说明 · 公开试玩 · AI 挑战 / Guide · Public Playtest · AI Challenge](https://samzebrado.github.io/DeeSewSew/playtest/)
+
 移动穿着线的针，慢慢绣出自己的作品。
 Move a threaded needle and make something at your own pace.
 
@@ -14,12 +17,16 @@ Move a threaded needle and make something at your own pace.
   Loose thread follows with sag and inertia; the tip enters first, the eye carries thread through, and tension travels from the new hole toward the old hole.
 - 可停在任意角度的绣盘旋转、可关闭的行针动画和自定义颜色。
   Rotation that stops at any angle, optional stitch animation, and custom colors.
-- 简体中文／英文、本机保存、撤销／重做、JSON 导入导出和可选单色小花引导。
-  Simplified Chinese/English, local saving, undo/redo, JSON import/export, and an optional monochrome flower guide.
+- 简体中文／英文、本机保存、撤销／重做、JSON 导入导出，以及小花、郁金香与爱心、小叶片、双樱桃四种可选引导。
+  Simplified Chinese/English, local saving, undo/redo, JSON import/export, and optional flower, tulip/heart, leaf and cherries guides.
 - 独立线段组、剪线，以及正面郁金香／背面爱心的双面引导。
   Independent thread runs, cutting, and a front-tulip/back-heart guide.
 - 正面、背面或正反面并排的干净 PNG 图片导出。
   Clean front, back, or side-by-side PNG image export.
+- 可选的实验性笔压预览，默认关闭，仅改变正在移动的松线展示。
+  An optional Experimental pen-pressure preview, off by default, affects only transient moving loose-thread presentation.
+- 独立的实验性 3D Lab：球面放线与可逆支撑展示，不是任意网格或完整丝线物理模拟。
+  A separate Experimental 3D Lab for sphere-surface thread and reversible support display, not arbitrary meshes or full thread physics.
 
 作品不上传到服务器。本机存储不可用时仍可导出当前内存中的作品。
 Artwork is not uploaded. If local storage is unavailable, the current in-memory artwork can still be exported.
@@ -61,6 +68,12 @@ Free stitching is the default. Choose “Stitch a flower” and follow the next 
 背面是诚实的针线连接，不是爱心图案。完成后可主动翻面看看，不会强制旋转。已有作品会保留，包括旧针孔到新图案的真实连接；想要独立的小花，可先导出旧作品，再清空布料。
 The back contains honest thread routing, not a heart motif. Completion invites you to inspect it without forcing a flip. Existing artwork is retained, including the real connection from the old hole to the new pattern. For a standalone flower, export your previous work before clearing the fabric.
 
+## AI 刺绣大挑战 / AI Embroidery Challenge
+
+欢迎能操作浏览器的 AI 与人类一起试试叠绣绣：只通过可见界面创作，让作品的 FRONT 和 BACK 两面都显得经过用心设计。没有奖金或正式排名；分享两面截图与提示词即可，不需要视频。规则和可复制的标准提示词见[公开试玩页面](https://samzebrado.github.io/DeeSewSew/playtest/)。[直接进入游戏](https://samzebrado.github.io/DeeSewSew/)。
+
+Browser agents and humans are invited to create through the visible GUI, aiming for intentional FRONT and BACK. No prizes or official leaderboard; screenshots of both sides and the prompt are enough, with no video required. See the [public playtest page](https://samzebrado.github.io/DeeSewSew/playtest/) for rules and a copyable prompt, or [play now](https://samzebrado.github.io/DeeSewSew/).
+
 ## 郁金香与爱心 / Tulip & heart
 
 这个独立引导先绣正面小郁金香，再提示翻到背面绣爱心。每条线按“亮点起线 → 下一亮点落针 → 剪线”完成，共 24 根线、48 次穿刺。起线从对面穿出，不造连接线；另一面只留下很小的同色起止锚点，不是完整打结模拟。退出、重载和撤销／重做保留真实作品。
@@ -92,8 +105,8 @@ The static PWA uses `/DeeSewSew/` for assets and offline scope. A local candidat
 
 ## 当前限制与证据边界 / Limitations & evidence
 
-- 当前是表面拓扑与轻量松线近似，不是体积线材或材料物理模拟。任意深度穿线、劈线、结、压力笔、陀螺仪、自由三轴相机仍延期。
-  This is surface topology with a lightweight loose-thread approximation, not volumetric thread or material physics. Arbitrary depth routing, splitting, knots, stylus pressure, gyroscope, and free three-axis cameras remain deferred.
+- 当前是表面拓扑与轻量松线近似，不是体积线材或材料物理模拟。实验性笔压预览默认关闭，仅在笔接触时改变临时松线展示；真实触控笔手感尚未验证。完整力度／深度／材料／触控笔系统，以及任意深度穿线、劈线、结、陀螺仪和自由三轴相机仍延期。
+  This is surface topology with a lightweight loose-thread approximation, not volumetric thread or material physics. The optional Experimental pen-pressure preview is off by default and changes only transient loose-thread presentation during pen contact; physical stylus feel remains unvalidated. Full force, depth, material and stylus systems, arbitrary-depth routing, splitting, knots, gyroscope and free three-axis cameras remain deferred.
 - 平针／回针是简化路径外观，不自动执行完整传统针法。旧版作品仅恢复历史正面外观，不虚构背面。
   Running/Back are simplified routing styles, not automated traditional sequences. Legacy pieces preserve their historical front appearance without inventing reverse topology.
 - 画布落针尚无完整键盘替代操作。无账号、云同步、图库或分析追踪。

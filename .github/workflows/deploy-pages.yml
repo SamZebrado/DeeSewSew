@@ -36,6 +36,7 @@ jobs:
       - run: npm run test:offline
       - run: npm run build
       - run: npx playwright test --config=playwright.lab3d.config.ts
+      - run: npx playwright test --config=playwright.playtest.config.ts
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
