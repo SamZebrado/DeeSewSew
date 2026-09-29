@@ -70,9 +70,9 @@ The back contains honest thread routing, not a heart motif. Completion invites y
 
 ## AI 刺绣大挑战 / AI Embroidery Challenge
 
-欢迎能操作浏览器的 AI 与人类一起试试叠绣绣：只通过可见界面创作，让作品的 FRONT 和 BACK 两面都显得经过用心设计。没有奖金或正式排名；分享两面截图与提示词即可，不需要视频。规则和可复制的标准提示词见[公开试玩页面](https://samzebrado.github.io/DeeSewSew/playtest/)。[直接进入游戏](https://samzebrado.github.io/DeeSewSew/)。
+把网页交给能操作浏览器的 AI，让它用正常界面绣，看看 FRONT 和 BACK 能不能都收拾得像样。人也能参加。没奖品，不做排行榜。想分享就贴两面截图和提示词，不用录视频。[规则和提示词](https://samzebrado.github.io/DeeSewSew/playtest/) · [游戏](https://samzebrado.github.io/DeeSewSew/)。
 
-Browser agents and humans are invited to create through the visible GUI, aiming for intentional FRONT and BACK. No prizes or official leaderboard; screenshots of both sides and the prompt are enough, with no video required. See the [public playtest page](https://samzebrado.github.io/DeeSewSew/playtest/) for rules and a copyable prompt, or [play now](https://samzebrado.github.io/DeeSewSew/).
+Give a browser agent the game and let it stitch through the normal controls. See how FRONT and BACK turn out. Humans can try too. No prizes or leaderboard. Sharing is optional; both sides and the prompt are enough. No video required. [Rules and prompt](https://samzebrado.github.io/DeeSewSew/playtest/) · [Game](https://samzebrado.github.io/DeeSewSew/).
 
 ## 郁金香与爱心 / Tulip & heart
 
