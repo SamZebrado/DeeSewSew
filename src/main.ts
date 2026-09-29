@@ -1,4 +1,6 @@
 import './style.css'
+import { mountMobileActions } from './mobile-actions'
+import { touchesGuideTarget } from './touch-guide-target'
 import { createPngExportAction, type PngExportChoice } from './artwork-png-action'
 import { localize, locale, setText, switchLocale, t } from './i18n'
 import { guideTargets, guidePattern, startGuide, guideStep, loadGuide, nearGuideTarget, saveGuide, type GuideSession } from './leaf-guide'
@@ -281,10 +283,13 @@ function updateHistoryControls(): void {
   endThreadButton.disabled = !activeThreadRun(runHistory.present) || history.present.nextOrder>=999_999_999
     || !!(guide && guideIndex < guideTargets(guide).length) || !!(tulipAction && tulipAction.kind!=='cut' && tulipAction.kind!=='done')
 }
+function currentGuideTarget(): NormalizedPoint | undefined {
+  return guide ? guideTargets(guide)[guideIndex] : tulipAction && 'target' in tulipAction
+    && visibleSurface(viewController.snapshot())===tulipAction.side ? tulipAction.target : undefined
+}
 function render(): void {
   updateTulipCopy()
-  const nextGuide = guide ? guideTargets(guide)[guideIndex] : tulipAction && 'target' in tulipAction
-    && visibleSurface(viewController.snapshot())===tulipAction.side ? tulipAction.target : undefined
+  const nextGuide = currentGuideTarget()
   guideMarker.hidden = !nextGuide || !targetMode()
   if (nextGuide && !guideMarker.hidden) {
     const geometry = projectionGeometry(), p = projectFabricPoint(nextGuide, viewController.snapshot(), geometry)
@@ -456,6 +461,13 @@ function pointerPoint(event: PointerEvent, requireTarget = true): NormalizedPoin
   const view = viewController.snapshot()
   if (requireTarget && !targetMode(view)) return null
   const rect = hoopShell.getBoundingClientRect()
+  // The visible guide is directly touchable. Free touch keeps its original
+  // finger-occlusion offset; only the current visible guide point can align.
+  if (event.pointerType === 'touch' && targetMode(view)) {
+    const guided = currentGuideTarget()
+    if (guided && touchesGuideTarget(event.clientX, event.clientY,
+      projectFabricPoint(guided, view, projectionGeometry()))) return { ...guided }
+  }
   const offset = event.pointerType === 'touch' ? touchTargetOffset(event.clientX, event.clientY, rect, FABRIC_RADIUS) : 0
   return inverseProjectFabricPoint(event.clientX, event.clientY - offset, view, projectionGeometry())
 }
@@ -882,5 +894,9 @@ artworkFile.addEventListener('change', async () => {
     announce('Artwork imported', 'The validated artwork is ready to continue.')
   } catch { if (request === importRequest) announce('Import failed', 'Invalid or unsupported artwork file. Your current work is unchanged.') }
 })
+
+mountMobileActions(document.querySelector<HTMLElement>('#needle-state')!,
+  [undoButton, redoButton, endThreadButton], [frontButton, backButton], guideCopy,
+  () => cancelNeedleInteraction())
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) window.addEventListener('load', () => navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL }))
